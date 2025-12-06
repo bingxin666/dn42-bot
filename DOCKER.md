@@ -2,6 +2,15 @@
 
 This guide explains how to deploy the DN42 bot using Docker.
 
+## Prerequisites
+
+Before running the containers, you must create configuration files:
+
+1. **Server**: Copy `server/config.example.py` to `server/config.py` and customize it
+2. **Agent**: Copy `agent/agent_config.example.json` to `agent/agent_config.json` and customize it
+
+**Important**: Never commit your actual config files (`config.py` and `agent_config.json`) to version control as they contain sensitive information!
+
 ## Building Images
 
 ### Server Image
@@ -22,22 +31,20 @@ docker build -t dn42-bot-agent:latest .
 
 ### Server Container
 
-1. Create your `config.py` based on `config.example.py`
-2. Run the container:
+Run the container:
 
 ```bash
 docker run -d \
   --name dn42-bot-server \
   -v $(pwd)/server/config.py:/app/config.py:ro \
-  -v dn42-bot-data:/app \
+  -v dn42-bot-server-data:/app/data \
   -p 3443:3443 \
   dn42-bot-server:latest
 ```
 
 ### Agent Container
 
-1. Create your `agent_config.json` based on `agent_config.example.json`
-2. Run the container with necessary privileges:
+Run the container with necessary privileges:
 
 ```bash
 docker run -d \
@@ -66,7 +73,7 @@ services:
     container_name: dn42-bot-server
     volumes:
       - ./server/config.py:/app/config.py:ro
-      - server-data:/app
+      - server-data:/app/data
     ports:
       - "3443:3443"
     restart: unless-stopped

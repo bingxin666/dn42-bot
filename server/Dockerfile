@@ -24,9 +24,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Create a config file from example if it doesn't exist
-RUN if [ ! -f config.py ]; then cp config.example.py config.py; fi
-
 # Expose the webhook port (default 3443)
 EXPOSE 3443
 

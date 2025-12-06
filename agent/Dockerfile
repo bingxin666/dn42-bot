@@ -26,9 +26,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Create a config file from example if it doesn't exist
-RUN if [ ! -f agent_config.json ]; then cp agent_config.example.json agent_config.json; fi
-
 # Expose the API port (default 54321)
 EXPOSE 54321
 

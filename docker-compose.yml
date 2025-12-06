@@ -7,7 +7,7 @@ services:
       dockerfile: Dockerfile
     container_name: dn42-bot-server
     volumes:
-      # Mount your config.py file here
+      # Mount your config.py file here (create it first based on config.example.py)
       - ./server/config.py:/app/config.py:ro
       # Persistent data
       - server-data:/app/data
@@ -28,7 +28,7 @@ services:
     devices:
       - /dev/net/tun
     volumes:
-      # Mount your agent_config.json file here
+      # Mount your agent_config.json file here (create it first based on agent_config.example.json)
       - ./agent/agent_config.json:/app/agent_config.json:ro
       # Mount WireGuard config directory if needed
       - /etc/wireguard:/etc/wireguard:ro
