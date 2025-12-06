@@ -181,7 +181,7 @@ async def get_info(request):
         wg_transfer = [0, 0]
     bird_status = {}
     for the_session in session_name:
-        out = simple_run(f"birdc show protocols {the_session}").splitlines()
+        out = simple_run(f"birdc -s {base.BIRD_CTL_PATH} show protocols {the_session}").splitlines()
         if len(out) != 3:
             return web.Response(body="bird error", status=500)
         out = out[2].strip().split(maxsplit=6)
@@ -193,7 +193,7 @@ async def get_info(request):
         except IndexError:
             pass
         if len(out) >= 6 and out[5] == "Established":
-            out = simple_run(f"birdc show protocols all {the_session}")
+            out = simple_run(f"birdc -s {base.BIRD_CTL_PATH} show protocols all {the_session}")
             out = [i.strip().splitlines() for i in out.split("Channel ")]
             out = {
                 i[0].strip(): {j.split(":", 1)[0].strip(): j.split(":", 1)[1].strip() for j in i[1:]}
@@ -343,7 +343,7 @@ async def setup_peer(request):
     simple_run("systemctl daemon-reload")
     simple_run(f"systemctl enable wg-quick@dn42-{peer_info['ASN']}")
     simple_run(f"systemctl restart wg-quick@dn42-{peer_info['ASN']}")
-    simple_run("birdc c")
+    simple_run(f"birdc -s {base.BIRD_CTL_PATH} c")
     if base.VNSTAT_AUTO_ADD:
         simple_run(f'vnstat --add -i dn42-{peer_info["ASN"]}')
 
@@ -372,7 +372,7 @@ async def remove_peer(request):
         os.remove(f"/etc/bird/dn42_peers/{asn}.conf")
     except BaseException:
         pass
-    simple_run("birdc c")
+    simple_run(f"birdc -s {base.BIRD_CTL_PATH} c")
     if base.VNSTAT_AUTO_REMOVE:
         simple_run(f"vnstat --remove -i dn42-{asn} --force")
 
@@ -392,8 +392,8 @@ async def restart_peer(request):
         return web.Response(status=403)
 
     out_wg = simple_run(f"systemctl restart wg-quick@dn42-{asn}")
-    out_v4 = simple_run(f"birdc restart DN42_{asn}_v4")
-    out_v6 = simple_run(f"birdc restart DN42_{asn}_v6")
+    out_v4 = simple_run(f"birdc -s {base.BIRD_CTL_PATH} restart DN42_{asn}_v4")
+    out_v6 = simple_run(f"birdc -s {base.BIRD_CTL_PATH} restart DN42_{asn}_v6")
     if "syntax error" in out_v4 and "syntax error" in out_v6:
         if out_wg:
             return web.Response(status=404)

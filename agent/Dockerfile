@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 # Install system dependencies required by the agent
 RUN apt-get update && \

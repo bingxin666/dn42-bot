@@ -19,6 +19,7 @@ try:
     MY_DN42_ULA_ADDRESS = ip_address(raw_config["MY_DN42_ULA_ADDRESS"])
     MY_DN42_IPv4_ADDRESS = ip_address(raw_config["MY_DN42_IPv4_ADDRESS"])
     MY_WG_PUBLIC_KEY = raw_config["MY_WG_PUBLIC_KEY"]
+    BIRD_CTL_PATH = raw_config.get("BIRD_CTL_PATH", "/var/run/bird/bird.ctl")
     BIRD_TABLE_4 = raw_config["BIRD_TABLE_4"]
     BIRD_TABLE_6 = raw_config["BIRD_TABLE_6"]
     VNSTAT_AUTO_ADD = raw_config["VNSTAT_AUTO_ADD"]

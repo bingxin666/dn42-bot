@@ -86,7 +86,7 @@ async def block(request):
             f.write(new)
     except BaseException:
         return web.Response(body="blacklist write error", status=500)
-    simple_run("birdc c")
+    simple_run(f"birdc -s {base.BIRD_CTL_PATH} c")
     return web.Response(status=200)
 
 
@@ -120,7 +120,7 @@ async def unblock(request):
             f.write(new)
     except BaseException:
         return web.Response(body="blacklist write error", status=500)
-    simple_run("birdc c")
+    simple_run(f"birdc -s {base.BIRD_CTL_PATH} c")
     return web.Response(status=200)
 
 
@@ -143,5 +143,5 @@ async def unblock_all(request):
             f.write(new)
     except BaseException:
         return web.Response(body="blacklist write error", status=500)
-    simple_run("birdc c")
+    simple_run(f"birdc -s {base.BIRD_CTL_PATH} c")
     return web.Response(status=200)

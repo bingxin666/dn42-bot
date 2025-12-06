@@ -73,9 +73,13 @@ async def get_route(request):
         return web.Response(status=403)
     try:
         if ":" in target:
-            output = simple_run(f"birdc show route table {base.BIRD_TABLE_6} for {target} all primary")
+            output = simple_run(
+                f"birdc -s {base.BIRD_CTL_PATH} show route table {base.BIRD_TABLE_6} for {target} all primary"
+            )
         else:
-            output = simple_run(f"birdc show route table {base.BIRD_TABLE_4} for {target} all primary")
+            output = simple_run(
+                f"birdc -s {base.BIRD_CTL_PATH} show route table {base.BIRD_TABLE_4} for {target} all primary"
+            )
     except subprocess.TimeoutExpired:
         return web.Response(status=408)
     return web.Response(body=output)
@@ -91,9 +95,13 @@ async def get_path(request):
         return web.Response(status=403)
     try:
         if ":" in target:
-            output = simple_run(f"birdc show route table {base.BIRD_TABLE_6} for {target} all primary")
+            output = simple_run(
+                f"birdc -s {base.BIRD_CTL_PATH} show route table {base.BIRD_TABLE_6} for {target} all primary"
+            )
         else:
-            output = simple_run(f"birdc show route table {base.BIRD_TABLE_4} for {target} all primary")
+            output = simple_run(
+                f"birdc -s {base.BIRD_CTL_PATH} show route table {base.BIRD_TABLE_4} for {target} all primary"
+            )
     except subprocess.TimeoutExpired:
         return web.Response(status=408)
     for line in output.splitlines():
