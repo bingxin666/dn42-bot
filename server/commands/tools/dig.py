@@ -4,7 +4,7 @@ from ipaddress import IPv4Network, IPv6Network, ip_address
 
 import tools
 from base import bot
-from config import DN42_ONLY
+from config import DIG_ADDRESS, DN42_ONLY
 from punycode import convert as punycode
 
 
@@ -57,6 +57,10 @@ def dig(message):
             reply_markup=tools.gen_peer_me_markup(message),
         )
         return
+    # If user did not specify @server and DIG_ADDRESS is set, use it as default
+    if not dig_server and DIG_ADDRESS:
+        dig_server = DIG_ADDRESS
+
     if dig_server:
         try:
             t = ip_address(dig_server)
