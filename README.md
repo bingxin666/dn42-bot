@@ -1,3 +1,12 @@
+# Bingxin DN42 Bot
+
+**这是 [Potat0000/dn42-bot](https://github.com/Potat0000/dn42-bot) 的 Fork 版本**，根据我自己的需求添加了以下功能：
+ - 支持了 [Docker 部署](DOCKER.md)
+ - 修改了有效 ASN 的判定逻辑以适配部分 whois 服务器
+ - 修改了默认数据存放位置
+
+以下为原 README 内容：
+
 # Yet Another Telegram DN42 Bot
 
 ## Features
@@ -28,7 +37,7 @@
   - [x] Block / Unblock an ASN
   - [x] Get blocked ASN list
 
-## Deployment
+## 部署
 
 The project is divided into two parts: server and agent, which can be deployed separately and have independent `requirements.txt`.
 
