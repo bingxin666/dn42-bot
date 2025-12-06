@@ -365,7 +365,10 @@ def extract_asn(text, *, privilege=False):
             .stdout.decode("utf-8")
             .strip()
         )
-        if "% Information related to 'aut-num/AS" in whois_result:
+        if any(
+            line.strip().lower().startswith("aut-num:") and f"as{asn}".lower() in line.lower()
+            for line in whois_result.splitlines()
+        ):
             return asn
         else:
             if disallow_extend:
@@ -383,7 +386,10 @@ def extract_asn(text, *, privilege=False):
                 .stdout.decode("utf-8")
                 .strip()
             )
-            if "% Information related to 'aut-num/AS" in whois_result:
+            if any(
+                line.strip().lower().startswith("aut-num:") and f"as{asn}".lower() in line.lower()
+                for line in whois_result.splitlines()
+            ):
                 return asn
             else:
                 return original_asn if privilege else None
