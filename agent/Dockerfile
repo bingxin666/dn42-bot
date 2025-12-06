@@ -26,6 +26,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
+# Precompile Python bytecode to avoid compile on first run
+RUN python -m compileall -q /app
+
 # Expose the API port (default 54321)
 EXPOSE 54321
 
