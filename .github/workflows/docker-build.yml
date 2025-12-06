@@ -53,6 +53,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
             type=sha
+            type=raw,value=latest
 
       - name: Build and push Server Docker image
         uses: docker/build-push-action@v5
@@ -98,6 +99,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
             type=sha
+            type=raw,value=latest
 
       - name: Build and push Agent Docker image
         uses: docker/build-push-action@v5
