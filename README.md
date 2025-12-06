@@ -32,6 +32,16 @@
 
 The project is divided into two parts: server and agent, which can be deployed separately and have independent `requirements.txt`.
 
+### Docker Deployment (Recommended)
+
+For Docker deployment, please see [DOCKER.md](DOCKER.md) for detailed instructions on:
+- Building Docker images
+- Running containers
+- Using Docker Compose
+- Using pre-built images from GitHub Container Registry
+
+### Manual Deployment
+
 ### Server
 
 The server directory contains the code for the tg-bot server.
