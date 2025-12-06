@@ -1,3 +1,4 @@
+import os
 import pickle
 from ipaddress import ip_network
 
@@ -24,7 +25,9 @@ ChinaIPv6 = []
 ChinaWhitelist = [ip_network(i) for i in config.CN_WHITELIST_IP]
 
 try:
-    with open("./user_db.pkl", "rb") as f:
+    data_dir = "/app/data"
+    os.makedirs(data_dir, exist_ok=True)
+    with open(os.path.join(data_dir, "user_db.pkl"), "rb") as f:
         db, db_privilege = pickle.load(f)
 except BaseException:
     db = {}

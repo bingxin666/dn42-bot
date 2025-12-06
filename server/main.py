@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import os
 import pickle
 import re
 import time
@@ -126,7 +127,9 @@ tools.update_china_ip()
 tools.update_as_route_table()
 tools.servers_check(startup=True)
 try:
-    with open("./map.pkl", "rb") as f:
+    data_dir = "/app/data"
+    os.makedirs(data_dir, exist_ok=True)
+    with open(os.path.join(data_dir, "map.pkl"), "rb") as f:
         tools.get_map(update=pickle.load(f))
 except BaseException:
     tools.get_map(update=True)
@@ -190,8 +193,10 @@ bot.set_my_commands(
     scope=BotCommandScopeAllPrivateChats(),
 )
 
-bot.enable_save_next_step_handlers(delay=2, filename="./step.save")
-bot.load_next_step_handlers(filename="./step.save")
+data_dir = "/app/data"
+os.makedirs(data_dir, exist_ok=True)
+bot.enable_save_next_step_handlers(delay=2, filename=os.path.join(data_dir, "step.save"))
+bot.load_next_step_handlers(filename=os.path.join(data_dir, "step.save"))
 
 
 bot.remove_webhook()

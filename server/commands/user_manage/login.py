@@ -1,3 +1,4 @@
+import os
 import pickle
 import re
 import shlex
@@ -130,7 +131,9 @@ def login_choose_email(asn, emails, last_msg_id, message):
     ):
         db[message.chat.id] = asn
         db_privilege.add(message.chat.id)
-        with open("./user_db.pkl", "wb") as f:
+        data_dir = "/app/data"
+        os.makedirs(data_dir, exist_ok=True)
+        with open(os.path.join(data_dir, "user_db.pkl"), "wb") as f:
             pickle.dump((db, db_privilege), f)
         bot.delete_message(message.chat.id, message.message_id)
         bot.delete_message(message.chat.id, last_msg_id)
@@ -215,7 +218,9 @@ def login_verify_code(asn, code, message):
         return
     if message.text.strip() == code:
         db[message.chat.id] = asn
-        with open("./user_db.pkl", "wb") as f:
+        data_dir = "/app/data"
+        os.makedirs(data_dir, exist_ok=True)
+        with open(os.path.join(data_dir, "user_db.pkl"), "wb") as f:
             pickle.dump((db, db_privilege), f)
         bot.send_message(
             message.chat.id,

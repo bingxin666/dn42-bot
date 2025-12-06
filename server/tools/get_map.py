@@ -1,3 +1,4 @@
+import os
 import pickle
 from collections import namedtuple
 from time import time
@@ -103,7 +104,9 @@ def gen_get_map():
             result["metadata"]["data_timestamp"],
             temp_peer_map,
         )
-        with open("./map.pkl", "wb") as f:
+        data_dir = "/app/data"
+        os.makedirs(data_dir, exist_ok=True)
+        with open(os.path.join(data_dir, "map.pkl"), "wb") as f:
             pickle.dump((update_time, data, peer_map), f)
 
     return get_map
