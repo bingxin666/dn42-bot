@@ -103,11 +103,13 @@ After GitHub Actions builds the images, you can pull them directly:
 
 ```bash
 # Pull server image
-docker pull ghcr.io/bingxin666/dn42-bot/server:latest
+docker pull ghcr.io/<your-github-username>/dn42-bot/server:latest
 
 # Pull agent image
-docker pull ghcr.io/bingxin666/dn42-bot/agent:latest
+docker pull ghcr.io/<your-github-username>/dn42-bot/agent:latest
 ```
+
+Replace `<your-github-username>` with the actual GitHub repository owner name.
 
 ## Notes
 
