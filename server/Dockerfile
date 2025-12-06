@@ -7,6 +7,7 @@ RUN apt-get update && \
     traceroute \
     dnsutils \
     whois \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 # Note: tcping should be installed separately. 
