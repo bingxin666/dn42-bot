@@ -30,9 +30,9 @@ services:
   agent:
     image: ghcr.io/bingxin666/dn42-bot/agent:latest
     container_name: dn42-agent
-    network_mode: host           # 共享宿主机网络，便于操作 WireGuard/路由
+    network_mode: host
     cap_add:
-      - NET_ADMIN                # 操作网络接口所需
+      - NET_ADMIN
     restart: unless-stopped
     volumes:
       - /etc/wireguard:/etc/wireguard
