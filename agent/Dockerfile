@@ -9,6 +9,7 @@ RUN apt-get update && \
     iproute2 \
     bird2 \
     vnstat \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 # Note: tcping should be installed separately. 
