@@ -13,53 +13,48 @@ from telebot.types import KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemo
 
 def get_email(asn):
     try:
-        # DN42 ASN 范围：按照原本逻辑直接用 AS{asn} 结果
+        # DN42 ASN 范围：直接查 AS{asn}；公网 ASN：按 whois 习惯查裸 asn，
+        # 后续统一通过 admin-c 的记录判断是否存在 DN42 源
         is_dn42_range = (
             4200000000 <= asn <= 4294967294
             or 76100 <= asn <= 76199
             or 64512 <= asn <= 65534
         )
+
+        # 第一次：按 ASN 查 admin-c
         if is_dn42_range:
-            whois_dn42 = (
+            whois_asn = (
                 subprocess.check_output(shlex.split(f"whois -h {config.WHOIS_ADDRESS} AS{asn}"), timeout=3)
                 .decode("utf-8")
                 .splitlines()[3:]
             )
         else:
-            # 非 DN42 段 ASN：先查 AS{asn}，若未检测到 DN42 源，则退回裸 asn 再查一次
-            whois1 = (
-                subprocess.check_output(shlex.split(f"whois -h {config.WHOIS_ADDRESS} AS{asn}"), timeout=3)
+            whois_asn = (
+                subprocess.check_output(shlex.split(f"whois -h {config.WHOIS_ADDRESS} {asn}"), timeout=3)
                 .decode("utf-8")
                 .splitlines()[3:]
             )
-            if any("source:" in line and "DN42" in line for line in whois1):
-                whois_dn42 = whois1
-            else:
-                whois2 = (
-                    subprocess.check_output(shlex.split(f"whois -h {config.WHOIS_ADDRESS} {asn}"), timeout=3)
-                    .decode("utf-8")
-                    .splitlines()[3:]
-                )
-                if any("source:" in line and "DN42" in line for line in whois2):
-                    whois_dn42 = whois2
-                else:
-                    # 既没有 DN42 源，说明不存在此 DN42 ASN
-                    return set()
 
-        # 在 DN42 结果里找 admin-c，如果找不到就直接返回空集
-        for line in whois_dn42:
+        # 在 ASN 记录里找 admin-c，如果找不到就直接返回空集
+        for line in whois_asn:
             if line.startswith("admin-c:"):
                 admin_c = line.split(":", 1)[1].strip()
                 break
         else:
             return set()
 
-        # 第二次：按 admin-c handle 再查一次，按原有方式提取邮箱
+        # 第二次：按 admin-c handle 再查一次，通过是否存在 source: DN42 判断是否为 DN42 ASN，
+        # 并在同一份记录中提取邮箱
         whois2 = (
             subprocess.check_output(shlex.split(f"whois -h {config.WHOIS_ADDRESS} {admin_c}"), timeout=3)
             .decode("utf-8")
             .splitlines()[3:]
         )
+
+        # 如果 admin-c 记录中不包含任何 DN42 源，则视为非 DN42 ASN
+        if not any("source:" in line and "DN42" in line for line in whois2):
+            return set()
+
         emails = set()
         for line in whois2:
             if line.startswith("e-mail:"):
