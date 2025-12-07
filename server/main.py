@@ -127,7 +127,7 @@ tools.update_china_ip()
 tools.update_as_route_table()
 tools.servers_check(startup=True)
 try:
-    data_dir = "/app/data"
+    data_dir = "./data"
     os.makedirs(data_dir, exist_ok=True)
     with open(os.path.join(data_dir, "map.pkl"), "rb") as f:
         tools.get_map(update=pickle.load(f))
@@ -193,7 +193,7 @@ bot.set_my_commands(
     scope=BotCommandScopeAllPrivateChats(),
 )
 
-data_dir = "/app/data"
+data_dir = "./data"
 os.makedirs(data_dir, exist_ok=True)
 bot.enable_save_next_step_handlers(delay=2, filename=os.path.join(data_dir, "step.save"))
 bot.load_next_step_handlers(filename=os.path.join(data_dir, "step.save"))
