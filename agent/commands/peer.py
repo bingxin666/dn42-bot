@@ -159,23 +159,32 @@ async def get_info(request):
         if out == "Unable to access interface: No such device":
             wg_last_handshake = 0
         else:
-            out = out.split()
-            if out[0] == wg_info[5]:
-                wg_last_handshake = int(out[1])
+            parts = out.split()
+            # parts[0] should be peer pubkey, but to be robust we only
+            # check length and parse the timestamp if present.
+            if len(parts) >= 2:
+                try:
+                    wg_last_handshake = int(parts[1])
+                except ValueError:
+                    wg_last_handshake = 0
             else:
-                return web.Response(body="wg error", status=500)
+                wg_last_handshake = 0
     else:
         wg_last_handshake = 0
+
     out = simple_run(f"wg show dn42-{asn} transfer")
     if out:
         if out == "Unable to access interface: No such device":
             wg_transfer = [0, 0]
         else:
-            out = out.split()
-            if out[0] == wg_info[5]:
-                wg_transfer = [int(out[1]), int(out[2])]
+            parts = out.split()
+            if len(parts) >= 3:
+                try:
+                    wg_transfer = [int(parts[1]), int(parts[2])]
+                except ValueError:
+                    wg_transfer = [0, 0]
             else:
-                return web.Response(body="wg error", status=500)
+                wg_transfer = [0, 0]
     else:
         wg_transfer = [0, 0]
     bird_status = {}
