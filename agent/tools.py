@@ -22,10 +22,15 @@ def set_sentry(func):
         if base.SENTRY_DSN:
             with sentry_sdk.start_transaction(name=f"Agent {request.rel_url}", sampled=True) as transaction:
                 transaction.set_tag("url", request.rel_url)
-                ret = await func(request)
-                transaction.set_http_status(ret.status)
-            return ret
+                try:
+                    ret = await func(request)
+                    transaction.set_http_status(ret.status)
+                    return ret
+                except Exception as e:
+                    transaction.set_http_status(500)
+                    sentry_sdk.capture_exception(e)
+                    raise
         else:
-            return func(request)
+            return await func(request)
 
     return wrapper
