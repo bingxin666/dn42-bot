@@ -36,10 +36,14 @@ services:
     network_mode: host
     cap_add:
       - NET_ADMIN
+      - SYS_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
     restart: unless-stopped
     volumes:
       - /etc/wireguard:/etc/wireguard
       - /etc/bird/dn42_peers:/etc/bird/dn42_peers
+      - /etc/bird/config:/etc/bird/config
       - /var/run/bird/bird.ctl:/var/run/bird/bird.ctl # 修改为你的 bird.ctl 路径
       - ./agent_config.json:/app/agent_config.json:ro
 ```
