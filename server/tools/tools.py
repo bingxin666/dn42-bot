@@ -360,38 +360,57 @@ def extract_asn(text, *, privilege=False):
         return None
     asn = original_asn
     try:
+        # 首先按原样查询 AS{asn}
         whois_result = (
             subprocess.run(shlex.split(f"whois -h {config.WHOIS_ADDRESS} AS{asn}"), stdout=subprocess.PIPE, timeout=3)
             .stdout.decode("utf-8")
             .strip()
         )
-        if "% Information related to 'aut-num/AS" in whois_result or any(
+        lines = whois_result.splitlines()
+        # 如果已经有 DN42 源，则认为此 ASN 存在于 DN42
+        if any("source:" in line and "DN42" in line for line in lines) or any(
             line.strip().lower().startswith("aut-num:") and f"as{asn}".lower() in line.lower()
-            for line in whois_result.splitlines()
+            for line in lines
         ):
             return asn
-        else:
-            if disallow_extend:
-                return original_asn if privilege else None
-            elif asn < 10000:
-                asn += 4242420000
-            elif 20000 <= asn < 30000:
-                asn += 4242400000
-            else:
-                return original_asn if privilege else None
-            whois_result = (
-                subprocess.run(
-                    shlex.split(f"whois -h {config.WHOIS_ADDRESS} AS{asn}"), stdout=subprocess.PIPE, timeout=3
-                )
+        # 对非 DN42 段 ASN，尝试裸 asn 再查一次，仍未找到 DN42 源则认为不存在于 DN42
+        is_dn42_range = (
+            4200000000 <= asn <= 4294967294
+            or 76100 <= asn <= 76199
+            or 64512 <= asn <= 65534
+        )
+        if not is_dn42_range:
+            whois_bare = (
+                subprocess.run(shlex.split(f"whois -h {config.WHOIS_ADDRESS} {asn}"), stdout=subprocess.PIPE, timeout=3)
                 .stdout.decode("utf-8")
                 .strip()
             )
-            if "% Information related to 'aut-num/AS" in whois_result or any(
-                line.strip().lower().startswith("aut-num:") and f"as{asn}".lower() in line.lower()
-                for line in whois_result.splitlines()
-            ):
+            bare_lines = whois_bare.splitlines()
+            if any("source:" in line and "DN42" in line for line in bare_lines):
                 return asn
-            else:
-                return original_asn if privilege else None
+            # 裸 asn 也不是 DN42 源，视为不存在 DN42 ASN
+            return original_asn if privilege else None
+        # DN42 段 ASN 且 AS 查询中没有 DN42 源时，尝试短 ASN 扩展逻辑
+        if disallow_extend:
+            return original_asn if privilege else None
+        elif asn < 10000:
+            asn += 4242420000
+        elif 20000 <= asn < 30000:
+            asn += 4242400000
+        else:
+            return original_asn if privilege else None
+        whois_result = (
+            subprocess.run(shlex.split(f"whois -h {config.WHOIS_ADDRESS} AS{asn}"), stdout=subprocess.PIPE, timeout=3)
+            .stdout.decode("utf-8")
+            .strip()
+        )
+        lines = whois_result.splitlines()
+        if any("source:" in line and "DN42" in line for line in lines) or any(
+            line.strip().lower().startswith("aut-num:") and f"as{asn}".lower() in line.lower()
+            for line in lines
+        ):
+            return asn
+        else:
+            return original_asn if privilege else None
     except BaseException:
         return original_asn
