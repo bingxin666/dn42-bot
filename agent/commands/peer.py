@@ -294,7 +294,6 @@ async def setup_peer(request):
         "PostUp = ip addr add {my_lla}/64{ll} dev %i\n"
         "PostUp = ip addr add {my_ula}/128{ula} dev %i\n"
         "PostUp = ip addr add {my_ipv4}/32{ipv4} dev %i\n"
-        "\n"
         "[Peer]\n"
         "PublicKey = {pubkey}\n"
         "Endpoint = {clearnet}\n"
