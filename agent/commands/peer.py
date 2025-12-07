@@ -340,9 +340,8 @@ async def setup_peer(request):
     with open(f"/etc/bird/dn42_peers/{peer_info['ASN']}.conf", "w") as f:
         f.write(bird)
 
-    simple_run("systemctl daemon-reload")
-    simple_run(f"systemctl enable wg-quick@dn42-{peer_info['ASN']}")
-    simple_run(f"systemctl restart wg-quick@dn42-{peer_info['ASN']}")
+    # In container: directly bring interface up; do not touch systemd units
+    simple_run(f"wg-quick up dn42-{peer_info['ASN']}")
     simple_run(f"birdc -s {base.BIRD_CTL_PATH} c")
     if base.VNSTAT_AUTO_ADD:
         simple_run(f'vnstat --add -i dn42-{peer_info["ASN"]}')
@@ -362,8 +361,8 @@ async def remove_peer(request):
     else:
         return web.Response(status=403)
 
-    simple_run(f"systemctl stop wg-quick@dn42-{asn}")
-    simple_run(f"systemctl disable wg-quick@dn42-{asn}")
+    # In container: directly bring interface down; do not touch systemd units
+    simple_run(f"wg-quick down dn42-{asn}")
     try:
         os.remove(f"/etc/wireguard/dn42-{asn}.conf")
     except BaseException:
@@ -391,7 +390,9 @@ async def restart_peer(request):
     else:
         return web.Response(status=403)
 
-    out_wg = simple_run(f"systemctl restart wg-quick@dn42-{asn}")
+    # In container: restart by down+up via wg-quick directly
+    simple_run(f"wg-quick down dn42-{asn}")
+    out_wg = simple_run(f"wg-quick up dn42-{asn}")
     out_v4 = simple_run(f"birdc -s {base.BIRD_CTL_PATH} restart DN42_{asn}_v4")
     out_v6 = simple_run(f"birdc -s {base.BIRD_CTL_PATH} restart DN42_{asn}_v6")
     if "syntax error" in out_v4 and "syntax error" in out_v6:

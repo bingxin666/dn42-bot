@@ -29,4 +29,31 @@ except BaseException:
     print("Failed to load config file. Exiting.")
     exit(1)
 
+def ensure_wg_interfaces_up():
+    """On startup, scan /etc/wireguard and ensure dn42-* interfaces are up.
+
+    This is intended for container environments where systemd is not managing
+    wg-quick@ units. It compares existing configs with `wg show` output and
+    brings up any missing interfaces.
+    """
+
+    try:
+        configs = [
+            i[5:-5]
+            for i in os.listdir("/etc/wireguard")
+            if i.startswith("dn42-") and i.endswith(".conf") and i[5:-5].isdigit()
+        ]
+    except FileNotFoundError:
+        return
+
+    out = simple_run("wg show interfaces")
+    if not out:
+        existing = set()
+    else:
+        existing = set(out.split())
+
+    for asn in configs:
+        if f"dn42-{asn}" not in existing:
+            simple_run(f"wg-quick up dn42-{asn}")
+
 routes = web.RouteTableDef()

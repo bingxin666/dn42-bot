@@ -19,4 +19,9 @@ async def version(request):
 
 app = web.Application()
 app.add_routes(base.routes)
+
+# Ensure dn42-* WireGuard interfaces are up based on configs when running
+# inside a container without systemd-managed wg-quick@ units.
+base.ensure_wg_interfaces_up()
+
 web.run_app(app, host=base.HOST, port=base.PORT)
