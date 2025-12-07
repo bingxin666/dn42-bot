@@ -347,7 +347,16 @@ async def setup_peer(request):
         f.write(bird)
 
     # In container: directly bring interface up; do not touch systemd units
-    simple_run(f"wg-quick up dn42-{peer_info['ASN']}")
+    wg_ok = False
+    for _ in range(3):
+        try:
+            out_wg = simple_run(f"wg-quick up dn42-{peer_info['ASN']}", timeout=10)
+        except Exception:
+            out_wg = "wg-quick timeout or error"
+        if not out_wg:
+            wg_ok = True
+            break
+    # 即便三次都失败，这里也不抛异常，由上层逻辑或人工排查
     simple_run(f"birdc -s {base.BIRD_CTL_PATH} c")
     if base.VNSTAT_AUTO_ADD:
         simple_run(f'vnstat --add -i dn42-{peer_info["ASN"]}')
@@ -397,8 +406,19 @@ async def restart_peer(request):
         return web.Response(status=403)
 
     # In container: restart by down+up via wg-quick directly
-    simple_run(f"wg-quick down dn42-{asn}")
-    out_wg = simple_run(f"wg-quick up dn42-{asn}")
+    try:
+        simple_run(f"wg-quick down dn42-{asn}", timeout=10)
+    except Exception:
+        # 如果 down 失败（例如接口不存在），继续尝试 up
+        pass
+    out_wg = "wg-quick timeout or error"
+    for _ in range(3):
+        try:
+            out_wg = simple_run(f"wg-quick up dn42-{asn}", timeout=10)
+        except Exception:
+            out_wg = "wg-quick timeout or error"
+        if not out_wg:
+            break
     out_v4 = simple_run(f"birdc -s {base.BIRD_CTL_PATH} restart DN42_{asn}_v4")
     out_v6 = simple_run(f"birdc -s {base.BIRD_CTL_PATH} restart DN42_{asn}_v6")
     if "syntax error" in out_v4 and "syntax error" in out_v6:
