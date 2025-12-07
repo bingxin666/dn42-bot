@@ -13,8 +13,7 @@ from telebot.types import KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemo
 
 def get_email(asn):
     try:
-        # DN42 ASN 范围：直接查 AS{asn}；公网 ASN：按 whois 习惯查裸 asn，
-        # 后续统一通过 admin-c 的记录判断是否存在 DN42 源
+        # DN42 ASN 范围：直接查 AS{asn}；公网 ASN：按 whois 习惯查裸 asn
         is_dn42_range = (
             4200000000 <= asn <= 4294967294
             or 76100 <= asn <= 76199
@@ -43,17 +42,12 @@ def get_email(asn):
         else:
             return set()
 
-        # 第二次：按 admin-c handle 再查一次，通过是否存在 source: DN42 判断是否为 DN42 ASN，
-        # 并在同一份记录中提取邮箱
+        # 第二次：按 admin-c handle 再查一次，并在记录中提取邮箱
         whois2 = (
             subprocess.check_output(shlex.split(f"whois -h {config.WHOIS_ADDRESS} {admin_c}"), timeout=3)
             .decode("utf-8")
             .splitlines()[3:]
         )
-
-        # 如果 admin-c 记录中不包含任何 DN42 源，则视为非 DN42 ASN
-        if not any("source:" in line and "DN42" in line for line in whois2):
-            return set()
 
         emails = set()
         for line in whois2:
