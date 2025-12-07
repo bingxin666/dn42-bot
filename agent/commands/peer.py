@@ -107,10 +107,12 @@ async def get_info(request):
         wg_raw = f.read()
     with open(f"/etc/bird/dn42_peers/{asn}.conf", "r") as f:
         bird_raw = f.read()
-    try:
-        wg_info = re.search(wg_regex, wg_raw, re.MULTILINE).groups()
-    except BaseException:
-        return web.Response(body="wg error", status=500)
+
+    m = re.search(wg_regex, wg_raw, re.MULTILINE)
+    if not m:
+        # Config format not as expected; return a clearer error message
+        return web.Response(body="wg config parse error", status=500)
+    wg_info = m.groups()
     if wg_info[2]:
         v6 = wg_info[2]
         my_v6 = wg_info[1]
@@ -403,12 +405,16 @@ async def restart_peer(request):
     out_v4 = simple_run(f"birdc -s {base.BIRD_CTL_PATH} restart DN42_{asn}_v4")
     out_v6 = simple_run(f"birdc -s {base.BIRD_CTL_PATH} restart DN42_{asn}_v6")
     if "syntax error" in out_v4 and "syntax error" in out_v6:
+        # Bird config has syntax errors for both sessions
         if out_wg:
-            return web.Response(status=404)
+            # Both bird and wg reported issues
+            return web.Response(body="bird and wg restart error", status=500)
         else:
             return web.Response(body="bird error", status=500)
-    else:
-        if out_wg:
-            return web.Response(body="wg error", status=500)
-        else:
-            return web.Response(status=200)
+
+    # If we get here, bird restart is fine; only surface wg errors if they
+    # contain non-empty output that is not just warnings.
+    if out_wg:
+        return web.Response(body="wg restart error", status=500)
+
+    return web.Response(status=200)
