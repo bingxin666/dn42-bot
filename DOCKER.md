@@ -30,6 +30,9 @@ services:
   agent:
     image: ghcr.io/bingxin666/dn42-bot/agent:latest
     container_name: dn42-agent
+    dns:
+      - 172.20.0.53
+      - 1.1.1.1
     network_mode: host
     cap_add:
       - NET_ADMIN
