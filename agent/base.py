@@ -56,6 +56,10 @@ def ensure_wg_interfaces_up():
 
     for asn in configs:
         if f"dn42-{asn}" not in existing:
-            simple_run(f"wg-quick up dn42-{asn}")
+            try:
+                simple_run(f"wg-quick up dn42-{asn}", timeout=10)
+            except Exception:
+                # 单个接口启动失败不应阻止 agent 启动
+                continue
 
 routes = web.RouteTableDef()
