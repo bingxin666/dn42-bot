@@ -1,9 +1,18 @@
 # Bingxin DN42 Bot
 
-**这是 [Potat0000/dn42-bot](https://github.com/Potat0000/dn42-bot) 的 Fork 版本**，根据我自己的需求添加了以下功能：
+**这是 [Potat0000/dn42-bot](https://github.com/Potat0000/dn42-bot) 的 Fork 版本**，根据我自己的需求添加了部分功能。
+
+## 新增功能
  - 支持了 [Docker 部署](DOCKER.md)
  - 修改了有效 ASN 的判定逻辑以适配部分 whois 服务器
  - 修改了默认数据存放位置
+ - 新增了部分参数
+
+## 新增配置
+`server/config.py`：
+| Config Key          | Description                                                                                    |
+| ------------------- | ---------------------------------------------------------------------------------------------- |
+| DIG_ADDRESS         | The address of /dig                                                                            |
 
 以下为原 README 内容：
 

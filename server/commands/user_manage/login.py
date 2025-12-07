@@ -12,38 +12,42 @@ from telebot.types import KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemo
 
 
 def get_email(asn):
+    """Get contact emails for an ASN from whois.
+
+    The logic is intentionally tolerant:
+    - First query ASN, try to find an admin-c handle (if any).
+    - Then query that handle and extract any email-looking strings from
+      common fields like `e-mail:`, `contact:`, `abuse-mailbox:` or even
+      other lines that contain an email address.
+    """
     try:
         whois1 = (
             subprocess.check_output(shlex.split(f"whois -h {config.WHOIS_ADDRESS} AS{asn}"), timeout=3)
             .decode("utf-8")
             .splitlines()[3:]
         )
+        admin_c = None
         for line in whois1:
             if line.startswith("admin-c:"):
-                admin_c = line.split(":")[1].strip()
+                admin_c = line.split(":", 1)[1].strip()
                 break
-        else:
-            return set()
-        whois2 = (
-            subprocess.check_output(shlex.split(f"whois -h {config.WHOIS_ADDRESS} {admin_c}"), timeout=3)
-            .decode("utf-8")
-            .splitlines()[3:]
-        )
+        # 如果没有 admin-c，就直接在 ASN whois 结果里尝试抓邮箱
         emails = set()
-        for line in whois2:
-            if line.startswith("e-mail:"):
-                email = line.split(":")[1].strip()
-                if re.fullmatch(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", email):
-                    emails.add(email)
-        for line in whois2:
-            if line.startswith("contact:"):
-                email = line.split(":")[1].strip()
-                if re.fullmatch(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", email):
-                    emails.add(email)
-        if emails:
-            return emails
-        else:
-            return set()
+        email_re = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+        for line in whois1:
+            for m in email_re.findall(line):
+                emails.add(m)
+        # 如果有 admin-c，再继续查询 handle，放宽邮箱匹配
+        if admin_c:
+            whois2 = (
+                subprocess.check_output(shlex.split(f"whois -h {config.WHOIS_ADDRESS} {admin_c}"), timeout=3)
+                .decode("utf-8")
+                .splitlines()[3:]
+            )
+            for line in whois2:
+                for m in email_re.findall(line):
+                    emails.add(m)
+        return emails
     except BaseException:
         return set()
 
