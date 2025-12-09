@@ -13,7 +13,7 @@ from telebot.types import KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemo
 
 def get_email(asn):
     try:
-        # DN42 ASN 范围：直接查 AS{asn}；公网 ASN：按 whois 习惯查裸 asn
+        # DN42 ASN 范围和公网 ASN 都直接查裸 asn
         is_dn42_range = (
             4200000000 <= asn <= 4294967294
             or 76100 <= asn <= 76199
@@ -23,7 +23,7 @@ def get_email(asn):
         # 第一次：按 ASN 查 admin-c
         if is_dn42_range:
             whois_asn = (
-                subprocess.check_output(shlex.split(f"whois -h {config.WHOIS_ADDRESS} AS{asn}"), timeout=3)
+                subprocess.check_output(shlex.split(f"whois -h {config.WHOIS_ADDRESS} {asn}"), timeout=3)
                 .decode("utf-8")
                 .splitlines()[3:]
             )
