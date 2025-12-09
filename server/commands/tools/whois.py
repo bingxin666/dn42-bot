@@ -81,11 +81,11 @@ def whois(message):
         try:
             asn = int(whois_str)
             if asn < 10000:
-                whois_str = f"AS424242{asn:04d}"
+                whois_str = f"424242{asn:04d}"
             elif 20000 <= asn < 30000:
-                whois_str = f"AS42424{asn}"
+                whois_str = f"42424{asn}"
             else:
-                whois_str = f"AS{asn}"
+                whois_str = f"{asn}"
             whois_command = f"whois -h {config.WHOIS_ADDRESS} {whois_str}"
         except ValueError:
             if config.DN42_ONLY:

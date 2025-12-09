@@ -23,7 +23,7 @@ def get_email(asn):
         # 第一次：按 ASN 查 admin-c
         if is_dn42_range:
             whois_asn = (
-                subprocess.check_output(shlex.split(f"whois -h {config.WHOIS_ADDRESS} AS{asn}"), timeout=3)
+                subprocess.check_output(shlex.split(f"whois -h {config.WHOIS_ADDRESS} {asn}"), timeout=3)
                 .decode("utf-8")
                 .splitlines()[3:]
             )
