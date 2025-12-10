@@ -9,26 +9,47 @@ import config
 import tools
 from base import bot, db, db_privilege
 from telebot.types import KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from tools import registry
 
 
 def get_email(asn):
     try:
-        whois1 = (
-            subprocess.check_output(shlex.split(f"whois -h {config.WHOIS_ADDRESS} {asn}"), timeout=3)
-            .decode("utf-8")
-            .splitlines()[3:]
-        )
+        # Try to get from local registry first
+        admin_c = None
+        whois1_text = registry.get_whois_info_from_registry(str(asn))
+        
+        if whois1_text:
+            whois1 = whois1_text.splitlines()
+        else:
+            # Fallback to whois command
+            whois1 = (
+                subprocess.check_output(shlex.split(f"whois -h {config.WHOIS_ADDRESS} {asn}"), timeout=3)
+                .decode("utf-8")
+                .splitlines()[3:]
+            )
+        
         for line in whois1:
             if line.startswith("admin-c:"):
                 admin_c = line.split(":")[1].strip()
                 break
-        else:
+        
+        # Return early if no admin-c found
+        if not admin_c:
             return set()
-        whois2 = (
-            subprocess.check_output(shlex.split(f"whois -h {config.WHOIS_ADDRESS} {admin_c}"), timeout=3)
-            .decode("utf-8")
-            .splitlines()[3:]
-        )
+        
+        # Try to get admin-c info from local registry
+        whois2_text = registry.get_whois_info_from_registry(admin_c)
+        
+        if whois2_text:
+            whois2 = whois2_text.splitlines()
+        else:
+            # Fallback to whois command
+            whois2 = (
+                subprocess.check_output(shlex.split(f"whois -h {config.WHOIS_ADDRESS} {admin_c}"), timeout=3)
+                .decode("utf-8")
+                .splitlines()[3:]
+            )
+        
         emails = set()
         for line in whois2:
             if line.startswith("e-mail:"):
