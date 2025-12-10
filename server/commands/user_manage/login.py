@@ -32,7 +32,9 @@ def get_email(asn):
             if line.startswith("admin-c:"):
                 admin_c = line.split(":")[1].strip()
                 break
-        else:
+        
+        # Return early if no admin-c found
+        if not admin_c:
             return set()
         
         # Try to get admin-c info from local registry

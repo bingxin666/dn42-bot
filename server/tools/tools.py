@@ -447,6 +447,25 @@ def get_info(asn):
     return data
 
 
+def _check_asn_in_registry(asn_to_check):
+    """
+    Check if an ASN exists in the local registry.
+    
+    Args:
+        asn_to_check: ASN number to check
+        
+    Returns:
+        bool: True if ASN exists in registry, False otherwise
+    """
+    whois_result = registry.get_whois_info_from_registry(str(asn_to_check))
+    if whois_result:
+        return any(
+            line.strip().lower().startswith("aut-num:") and f"as{asn_to_check}".lower() in line.lower()
+            for line in whois_result.splitlines()
+        )
+    return False
+
+
 def extract_asn(text, *, privilege=False):
     if not text:
         return None
@@ -464,19 +483,9 @@ def extract_asn(text, *, privilege=False):
         return None
     asn = original_asn
     
-    # Try to get from local registry first
-    def check_asn_in_registry(asn_to_check):
-        whois_result = registry.get_whois_info_from_registry(str(asn_to_check))
-        if whois_result:
-            return any(
-                line.strip().lower().startswith("aut-num:") and f"as{asn_to_check}".lower() in line.lower()
-                for line in whois_result.splitlines()
-            )
-        return False
-    
     try:
         # Check current ASN in registry
-        if check_asn_in_registry(asn):
+        if _check_asn_in_registry(asn):
             return asn
         
         # Try whois command if not in registry
@@ -501,7 +510,7 @@ def extract_asn(text, *, privilege=False):
                 return original_asn if privilege else None
             
             # Check extended ASN in registry
-            if check_asn_in_registry(asn):
+            if _check_asn_in_registry(asn):
                 return asn
             
             # Try whois command for extended ASN

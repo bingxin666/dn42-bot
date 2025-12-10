@@ -12,6 +12,7 @@ Options:
 import sys
 import os
 import argparse
+import shutil
 
 # Add the tools directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -26,7 +27,6 @@ def main():
     args = parser.parse_args()
     
     if args.force:
-        import shutil
         print(f"Removing existing registry at {registry.REGISTRY_PATH}...")
         if os.path.exists(registry.REGISTRY_PATH):
             shutil.rmtree(registry.REGISTRY_PATH)
