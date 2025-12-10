@@ -19,6 +19,7 @@ from expiringdict import ExpiringDict
 from requests.adapters import HTTPAdapter, Retry
 from requests_futures.sessions import FuturesSession
 from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
+from tools import registry
 
 # 全局 whois 缓存，缓存时间 1 小时
 _whois_cache = ExpiringDict(max_len=10000, max_age_seconds=3600)
@@ -62,6 +63,23 @@ def get_whoisinfo_by_asn(asn, item=...):
     if cache_key in _whois_cache:
         return _whois_cache[cache_key]
     
+    # Try to get from local registry first
+    try:
+        value = registry.get_asn_field(asn, item)
+        if value:
+            raw_name = value
+            for w in ["MNT", "AS", "DN42"]:
+                if raw_name.endswith(f"-{w}"):
+                    raw_name = raw_name[: -(len(w) + 1)]
+                if raw_name.startswith(f"{w}-"):
+                    raw_name = raw_name[(len(w) + 1) :]
+            # 存入缓存
+            _whois_cache[cache_key] = raw_name
+            return raw_name
+    except BaseException:
+        pass
+    
+    # Fallback to whois command if local registry fails
     try:
         whois = subprocess.check_output(shlex.split(f"whois -h {config.WHOIS_ADDRESS} {asn}"), timeout=3).decode(
             "utf-8"
@@ -435,7 +453,23 @@ def extract_asn(text, *, privilege=False):
     except ValueError:
         return None
     asn = original_asn
+    
+    # Try to get from local registry first
+    def check_asn_in_registry(asn_to_check):
+        whois_result = registry.get_whois_info_from_registry(str(asn_to_check))
+        if whois_result:
+            return any(
+                line.strip().lower().startswith("aut-num:") and f"as{asn_to_check}".lower() in line.lower()
+                for line in whois_result.splitlines()
+            )
+        return False
+    
     try:
+        # Check current ASN in registry
+        if check_asn_in_registry(asn):
+            return asn
+        
+        # Try whois command if not in registry
         whois_result = (
             subprocess.run(shlex.split(f"whois -h {config.WHOIS_ADDRESS} {asn}"), stdout=subprocess.PIPE, timeout=3)
             .stdout.decode("utf-8")
@@ -455,6 +489,12 @@ def extract_asn(text, *, privilege=False):
                 asn += 4242400000
             else:
                 return original_asn if privilege else None
+            
+            # Check extended ASN in registry
+            if check_asn_in_registry(asn):
+                return asn
+            
+            # Try whois command for extended ASN
             whois_result = (
                 subprocess.run(
                     shlex.split(f"whois -h {config.WHOIS_ADDRESS} {asn}"), stdout=subprocess.PIPE, timeout=3
