@@ -19,7 +19,7 @@ def start_logout(message):
     if message.chat.id in db_privilege:
         db_privilege.remove(message.chat.id)
         text = "*[Privilege]*\n" + text
-    data_dir = "/app/data"
+    data_dir = "./data"
     os.makedirs(data_dir, exist_ok=True)
     with open(os.path.join(data_dir, "user_db.pkl"), "wb") as f:
         pickle.dump((db, db_privilege), f)

@@ -13,54 +13,37 @@ from telebot.types import KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemo
 
 def get_email(asn):
     try:
-        # DN42 ASN 范围和公网 ASN 都直接查裸 asn
-        is_dn42_range = (
-            4200000000 <= asn <= 4294967294
-            or 76100 <= asn <= 76199
-            or 64512 <= asn <= 65534
+        whois1 = (
+            subprocess.check_output(shlex.split(f"whois -h {config.WHOIS_ADDRESS} {asn}"), timeout=3)
+            .decode("utf-8")
+            .splitlines()[3:]
         )
-
-        # 第一次：按 ASN 查 admin-c
-        if is_dn42_range:
-            whois_asn = (
-                subprocess.check_output(shlex.split(f"whois -h {config.WHOIS_ADDRESS} {asn}"), timeout=3)
-                .decode("utf-8")
-                .splitlines()[3:]
-            )
-        else:
-            whois_asn = (
-                subprocess.check_output(shlex.split(f"whois -h {config.WHOIS_ADDRESS} {asn}"), timeout=3)
-                .decode("utf-8")
-                .splitlines()[3:]
-            )
-
-        # 在 ASN 记录里找 admin-c，如果找不到就直接返回空集
-        for line in whois_asn:
+        for line in whois1:
             if line.startswith("admin-c:"):
-                admin_c = line.split(":", 1)[1].strip()
+                admin_c = line.split(":")[1].strip()
                 break
         else:
             return set()
-
-        # 第二次：按 admin-c handle 再查一次，并在记录中提取邮箱
         whois2 = (
             subprocess.check_output(shlex.split(f"whois -h {config.WHOIS_ADDRESS} {admin_c}"), timeout=3)
             .decode("utf-8")
             .splitlines()[3:]
         )
-
         emails = set()
         for line in whois2:
             if line.startswith("e-mail:"):
-                email = line.split(":", 1)[1].strip()
+                email = line.split(":")[1].strip()
                 if re.fullmatch(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", email):
                     emails.add(email)
         for line in whois2:
             if line.startswith("contact:"):
-                email = line.split(":", 1)[1].strip()
+                email = line.split(":")[1].strip()
                 if re.fullmatch(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", email):
                     emails.add(email)
-        return emails
+        if emails:
+            return emails
+        else:
+            return set()
     except BaseException:
         return set()
 
@@ -148,7 +131,7 @@ def login_choose_email(asn, emails, last_msg_id, message):
     ):
         db[message.chat.id] = asn
         db_privilege.add(message.chat.id)
-        data_dir = "/app/data"
+        data_dir = "./data"
         os.makedirs(data_dir, exist_ok=True)
         with open(os.path.join(data_dir, "user_db.pkl"), "wb") as f:
             pickle.dump((db, db_privilege), f)
@@ -235,7 +218,7 @@ def login_verify_code(asn, code, message):
         return
     if message.text.strip() == code:
         db[message.chat.id] = asn
-        data_dir = "/app/data"
+        data_dir = "./data"
         os.makedirs(data_dir, exist_ok=True)
         with open(os.path.join(data_dir, "user_db.pkl"), "wb") as f:
             pickle.dump((db, db_privilege), f)
