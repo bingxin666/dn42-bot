@@ -31,7 +31,7 @@ def whoami(message, new_asn=None, info_node=None):
         new_asn = tools.extract_asn(new_asn, privilege=True)
         if new_asn:
             db[message.chat.id] = new_asn
-            data_dir = "/app/data"
+            data_dir = "./data"
             os.makedirs(data_dir, exist_ok=True)
             with open(os.path.join(data_dir, "user_db.pkl"), "wb") as f:
                 pickle.dump((db, db_privilege), f)
