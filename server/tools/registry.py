@@ -134,13 +134,11 @@ def parse_registry_file(file_path: str) -> Dict[str, str]:
     except (IOError, OSError) as e:
         print(f"Error reading file {file_path}: {e}")
     
-    # Convert lists to strings (join multiple values with comma for backwards compatibility)
+    # Convert lists to strings (take first value for consistency with whois behavior)
     result = {}
     for key, values in data.items():
-        if len(values) == 1:
-            result[key] = values[0]
-        elif len(values) > 1:
-            result[key] = values[0]  # Take first value for consistency with old behavior
+        if values:
+            result[key] = values[0]  # Take first value
     
     return result
 
@@ -323,13 +321,36 @@ def list_all_asns() -> List[int]:
     return sorted(asns)
 
 
+# Registry initialization state
+_init_complete = threading.Event()
+_init_success = False
+
+
 # Initialize registry on module load (in background to avoid blocking)
 def _init_registry():
     """Initialize registry in background thread."""
+    global _init_success
     try:
-        ensure_registry_cloned()
+        _init_success = ensure_registry_cloned()
     except Exception as e:
         print(f"Failed to initialize registry: {e}")
+        _init_success = False
+    finally:
+        _init_complete.set()
+
+
+def wait_for_init(timeout=30):
+    """
+    Wait for registry initialization to complete.
+    
+    Args:
+        timeout: Maximum time to wait in seconds
+        
+    Returns:
+        bool: True if initialization succeeded, False otherwise
+    """
+    _init_complete.wait(timeout=timeout)
+    return _init_success
 
 
 # Start initialization in background

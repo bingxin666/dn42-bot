@@ -47,6 +47,24 @@ def split_long_msg(msg, limit=4000):
     return chunks
 
 
+def normalize_mnt_name(raw_name):
+    """
+    Normalize maintainer/admin-c name by removing common prefixes and suffixes.
+    
+    Args:
+        raw_name: Raw name from whois/registry
+        
+    Returns:
+        Normalized name
+    """
+    for w in ["MNT", "AS", "DN42"]:
+        if raw_name.endswith(f"-{w}"):
+            raw_name = raw_name[: -(len(w) + 1)]
+        if raw_name.startswith(f"{w}-"):
+            raw_name = raw_name[(len(w) + 1) :]
+    return raw_name
+
+
 def get_whoisinfo_by_asn(asn, item=...):
     if t := extract_asn(asn):
         asn = t
@@ -67,16 +85,12 @@ def get_whoisinfo_by_asn(asn, item=...):
     try:
         value = registry.get_asn_field(asn, item)
         if value:
-            raw_name = value
-            for w in ["MNT", "AS", "DN42"]:
-                if raw_name.endswith(f"-{w}"):
-                    raw_name = raw_name[: -(len(w) + 1)]
-                if raw_name.startswith(f"{w}-"):
-                    raw_name = raw_name[(len(w) + 1) :]
+            raw_name = normalize_mnt_name(value)
             # 存入缓存
             _whois_cache[cache_key] = raw_name
             return raw_name
-    except BaseException:
+    except (OSError, IOError) as e:
+        # Registry file access error, fall back to whois
         pass
     
     # Fallback to whois command if local registry fails
@@ -86,16 +100,12 @@ def get_whoisinfo_by_asn(asn, item=...):
         )
         for i in whois.splitlines():
             if i.startswith(f"{item}:"):
-                raw_name = i.split(":")[1].strip()
-                for w in ["MNT", "AS", "DN42"]:
-                    if raw_name.endswith(f"-{w}"):
-                        raw_name = raw_name[: -(len(w) + 1)]
-                    if raw_name.startswith(f"{w}-"):
-                        raw_name = raw_name[(len(w) + 1) :]
+                raw_name = normalize_mnt_name(i.split(":")[1].strip())
                 # 存入缓存
                 _whois_cache[cache_key] = raw_name
                 return raw_name
-    except BaseException:
+    except (subprocess.TimeoutExpired, subprocess.SubprocessError, OSError):
+        # Whois command failed
         pass
     
     # 失败时也缓存结果，避免重复查询失败的 ASN
@@ -509,5 +519,6 @@ def extract_asn(text, *, privilege=False):
                 return asn
             else:
                 return original_asn if privilege else None
-    except BaseException:
+    except (subprocess.TimeoutExpired, subprocess.SubprocessError, OSError, ValueError, UnicodeDecodeError):
+        # Whois command or registry lookup failed
         return original_asn
