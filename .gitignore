@@ -3,3 +3,6 @@
 /.vscode
 /.VSCodeCounter
 __pycache__
+/cache
+/server/cache
+/server/data

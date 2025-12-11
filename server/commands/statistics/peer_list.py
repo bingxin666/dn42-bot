@@ -35,13 +35,9 @@ def peer_list(message):
         )
         return
     else:
-        # 批量并发查询所有 peer 的 as-name
-        peer_asns = sorted(peer_map[asn])
-        asn_names = tools.batch_get_whoisinfo_by_asn(peer_asns, 'as-name')
-        
         msg = ""
-        for peer_asn in peer_asns:
-            msg += f"{peer_asn:<10}  {asn_names.get(peer_asn, str(peer_asn))}\n"
+        for peer_asn in sorted(peer_map[asn]):
+            msg += f"{peer_asn:<10}  {tools.get_whoisinfo_by_asn(peer_asn, 'as-name')}\n"
     if len(msg) > 4000:
         msg = tools.split_long_msg(msg)
         last_msg = message

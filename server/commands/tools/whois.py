@@ -8,6 +8,7 @@ import config
 import tools
 from base import bot
 from commands.statistics.stats import get_stats
+from tools import registry
 
 
 def get_extra_route(asn):
@@ -50,48 +51,28 @@ def whois(message):
         )
         return
     bot.send_chat_action(chat_id=message.chat.id, action="typing")
-    whois_command = f"whois -h {config.WHOIS_ADDRESS} {whois_str}"
-    while True:
-        try:
-            whois_result = (
-                subprocess.run(
-                    shlex.split(whois_command),
-                    stdout=subprocess.PIPE,
-                    timeout=3,
-                )
-                .stdout.decode("utf-8")
-                .strip()
-            )
-        except subprocess.TimeoutExpired:
-            whois_result = "Request timeout.\n请求超时。"
-            break
-        except BaseException:
-            whois_result = "Something went wrong.\n发生了一些错误。"
-            break
-        if (
-            len(whois_result.splitlines()) > 1
-            and "% 404" not in whois_result
-            and (
-                whois_result.count("Information related to 'inetnum/")
-                + whois_result.count("Information related to 'inet6num/")
-                != 1
-            )
-        ):
-            break
+    
+    # Try to get from local registry first
+    whois_result = registry.get_whois_info_from_registry(whois_str)
+    
+    # If not found in local registry and it looks like an ASN, try normalized forms
+    if not whois_result:
         try:
             asn = int(whois_str)
+            # Try different ASN formats
             if asn < 10000:
-                whois_str = f"424242{asn:04d}"
+                normalized_asn = f"424242{asn:04d}"
             elif 20000 <= asn < 30000:
-                whois_str = f"42424{asn}"
+                normalized_asn = f"42424{asn}"
             else:
-                whois_str = f"{asn}"
-            whois_command = f"whois -h {config.WHOIS_ADDRESS} {whois_str}"
+                normalized_asn = f"{asn}"
+            whois_result = registry.get_whois_info_from_registry(normalized_asn)
         except ValueError:
-            if config.DN42_ONLY:
-                break
-            whois_command = f"whois -I {message.text.split()[1]}"
-        whois_result = ""
+            pass
+    
+    # If not found in local registry, return error (no fallback to whois)
+    if not whois_result:
+        whois_result = "Not found in registry.\n在注册表中未找到。"
     try:
         asn = int(whois_str[2:])
         if route_result := get_extra_route(asn):

@@ -13,7 +13,6 @@ get_from_agent = tools.get_from_agent
 get_info = tools.get_info
 get_map = get_map.get_map
 get_whoisinfo_by_asn = tools.get_whoisinfo_by_asn
-batch_get_whoisinfo_by_asn = tools.batch_get_whoisinfo_by_asn
 servers_check = servers_check.servers_check
 split_long_msg = tools.split_long_msg
 test_ip_domain = tools.test_ip_domain
