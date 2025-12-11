@@ -14,6 +14,7 @@ services:
     volumes:
       - ./config.py:/app/config.py:ro
       - ./data:/app/data
+      - ./cache:/app/cache
     restart: unless-stopped
 ```
 
