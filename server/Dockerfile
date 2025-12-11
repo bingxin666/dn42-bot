@@ -8,6 +8,7 @@ RUN apt-get update && \
     dnsutils \
     whois \
     build-essential \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Note: tcping should be installed separately. 
