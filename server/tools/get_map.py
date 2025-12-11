@@ -1,4 +1,5 @@
 import pickle
+import os
 from collections import namedtuple
 from time import time
 
