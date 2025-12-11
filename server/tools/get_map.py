@@ -1,11 +1,10 @@
-import os
 import pickle
 from collections import namedtuple
 from time import time
 
 import requests
 import rustworkx as rx
-from tools.tools import batch_get_whoisinfo_by_asn
+from tools.tools import get_whoisinfo_by_asn
 
 
 # https://github.com/isjerryxiao/rushed_dn42_map/blob/c7bc49eb8c59ba9309e2e7eed425105154802a0a/map.py#L92-L111
@@ -82,20 +81,6 @@ def gen_get_map():
         if time() - last_as_name_update_time > 3600:
             as_name.clear()
             last_as_name_update_time = time()
-        
-        # 收集所有需要查询的 ASN
-        asns_to_query = []
-        for rank_type, rank_data in temp_data.items():
-            for asn in rank_data.keys():
-                if asn not in as_name:
-                    asns_to_query.append(asn)
-        
-        # 批量并发查询所有缺失的 as-name
-        if asns_to_query:
-            batch_results = batch_get_whoisinfo_by_asn(asns_to_query, "as-name")
-            as_name.update(batch_results)
-        
-        # 构建排名数据
         for rank_type, rank_data in temp_data.items():
             s = [(k, v) for k, v in rank_data.items()]
             s.sort(key=lambda x: (-x[1], x[0]))
@@ -106,7 +91,9 @@ def gen_get_map():
                 if value != last_value:
                     rank_now = index
                 last_value = value
-                out.append((rank_now, asn, as_name.get(asn, str(asn)), value))
+                if asn not in as_name:
+                    as_name[asn] = get_whoisinfo_by_asn(asn, "as-name")
+                out.append((rank_now, asn, as_name[asn], value))
             temp_data[rank_type] = out
         temp_peer_map = {}
         for asn, idx in asn_to_index.items():

@@ -93,84 +93,10 @@ def get_whoisinfo_by_asn(asn, item=...):
         # Registry file access error, fall back to whois
         pass
     
-    # Fallback to whois command if local registry fails
-    try:
-        whois = subprocess.check_output(shlex.split(f"whois -h {config.WHOIS_ADDRESS} {asn}"), timeout=3).decode(
-            "utf-8"
-        )
-        for i in whois.splitlines():
-            if i.startswith(f"{item}:"):
-                raw_name = normalize_mnt_name(i.split(":")[1].strip())
-                # 存入缓存
-                _whois_cache[cache_key] = raw_name
-                return raw_name
-    except (subprocess.TimeoutExpired, subprocess.SubprocessError, OSError):
-        # Whois command failed
-        pass
-    
     # 失败时也缓存结果，避免重复查询失败的 ASN
     result = str(asn)
     _whois_cache[cache_key] = result
     return result
-
-
-def batch_get_whoisinfo_by_asn(asn_list, item=..., max_workers=20):
-    """
-    批量并发查询多个 ASN 的 whois 信息
-    
-    参数:
-        asn_list: ASN 列表
-        item: 要查询的项目，默认为 'mnt-by' 或 'admin-c'
-        max_workers: 最大并发线程数
-    
-    返回:
-        字典 {asn: whois_info}
-    """
-    results = {}
-    
-    # 先检查缓存，只查询未缓存的 ASN
-    to_query = []
-    for asn in asn_list:
-        if t := extract_asn(asn):
-            asn = t
-        else:
-            results[asn] = str(asn)
-            continue
-            
-        query_item = item
-        if query_item is ...:
-            if 4201270000 <= asn < 4201280000:
-                query_item = "admin-c"
-            else:
-                query_item = "mnt-by"
-        
-        cache_key = (asn, query_item)
-        if cache_key in _whois_cache:
-            results[asn] = _whois_cache[cache_key]
-        else:
-            to_query.append((asn, query_item))
-    
-    # 如果没有需要查询的，直接返回
-    if not to_query:
-        return results
-    
-    # 并发查询未缓存的 ASN
-    def _query_one(asn_item_pair):
-        asn, query_item = asn_item_pair
-        result = get_whoisinfo_by_asn(asn, query_item)
-        return asn, result
-    
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(_query_one, pair): pair for pair in to_query}
-        for future in as_completed(futures):
-            try:
-                asn, result = future.result()
-                results[asn] = result
-            except BaseException:
-                asn, _ = futures[future]
-                results[asn] = str(asn)
-    
-    return results
 
 
 def get_asn_mnt_text(asn):
@@ -488,46 +414,21 @@ def extract_asn(text, *, privilege=False):
         if _check_asn_in_registry(asn):
             return asn
         
-        # Try whois command if not in registry
-        whois_result = (
-            subprocess.run(shlex.split(f"whois -h {config.WHOIS_ADDRESS} {asn}"), stdout=subprocess.PIPE, timeout=3)
-            .stdout.decode("utf-8")
-            .strip()
-        )
-        if any(
-            line.strip().lower().startswith("aut-num:") and f"as{asn}".lower() in line.lower()
-            for line in whois_result.splitlines()
-        ):
+        # Not found in registry; try DN42 extended ranges only via registry
+        if disallow_extend:
+            return original_asn if privilege else None
+        elif asn < 10000:
+            asn += 4242420000
+        elif 20000 <= asn < 30000:
+            asn += 4242400000
+        else:
+            return original_asn if privilege else None
+        
+        # Check extended ASN in registry
+        if _check_asn_in_registry(asn):
             return asn
         else:
-            if disallow_extend:
-                return original_asn if privilege else None
-            elif asn < 10000:
-                asn += 4242420000
-            elif 20000 <= asn < 30000:
-                asn += 4242400000
-            else:
-                return original_asn if privilege else None
-            
-            # Check extended ASN in registry
-            if _check_asn_in_registry(asn):
-                return asn
-            
-            # Try whois command for extended ASN
-            whois_result = (
-                subprocess.run(
-                    shlex.split(f"whois -h {config.WHOIS_ADDRESS} {asn}"), stdout=subprocess.PIPE, timeout=3
-                )
-                .stdout.decode("utf-8")
-                .strip()
-            )
-            if any(
-                line.strip().lower().startswith("aut-num:") and f"as{asn}".lower() in line.lower()
-                for line in whois_result.splitlines()
-            ):
-                return asn
-            else:
-                return original_asn if privilege else None
+            return original_asn if privilege else None
     except (subprocess.TimeoutExpired, subprocess.SubprocessError, OSError, ValueError, UnicodeDecodeError):
         # Whois command or registry lookup failed
         return original_asn

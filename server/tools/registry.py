@@ -10,8 +10,7 @@ from pathlib import Path
 from typing import Optional, Dict, List
 
 # Registry configuration
-REGISTRY_URL = "https://git.dn42.dev/dn42/registry.git"
-REGISTRY_URL_FALLBACK = "https://github.com/dn42/registry.git"
+REGISTRY_URL = "https://git.pysio.online/pysio/mirrors-dn42"
 CACHE_DIR = "./cache"
 REGISTRY_PATH = os.path.join(CACHE_DIR, "registry")
 
@@ -75,21 +74,7 @@ def ensure_registry_cloned() -> bool:
                     return True
                 else:
                     print(f"Failed to clone from primary source: {result.stderr}")
-                    print("Trying fallback URL...")
-                    
-                    # Try fallback URL (GitHub mirror)
-                    result = subprocess.run(
-                        ["git", "clone", "--depth", "1", REGISTRY_URL_FALLBACK, REGISTRY_PATH],
-                        capture_output=True,
-                        timeout=120,
-                        text=True
-                    )
-                    if result.returncode == 0:
-                        print("Successfully cloned DN42 registry from fallback source (GitHub)")
-                        return True
-                    else:
-                        print(f"Failed to clone from fallback source: {result.stderr}")
-                        return False
+                    return False
             except (subprocess.TimeoutExpired, subprocess.SubprocessError) as e:
                 print(f"Error cloning registry: {e}")
                 return False
