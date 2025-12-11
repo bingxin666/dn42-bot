@@ -4,7 +4,7 @@
 
 ## 新增功能
  - 支持了 [Docker 部署](DOCKER.md)
- - 修改了有效 ASN 的判定逻辑以适配部分 whois 服务器
+ - 修改了部分 whois 请求为本地拉取仓库进行遍历
  - 修改了默认数据存放位置
  - 新增了部分参数
 
@@ -145,3 +145,4 @@ You should install a `tcping` command in the system. Currently, the agent only s
 ## Have a try
 
 My bot is deployed at [@Potat0_DN42_Bot](https://t.me/Potat0_DN42_Bot). Welcome to peer with me!
+
