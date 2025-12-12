@@ -424,7 +424,7 @@ async def restart_peer(request):
     out_v6 = simple_run(f"birdc -s {base.BIRD_CTL_PATH} restart DN42_{asn}_v6")
     if "syntax error" in out_v4 and "syntax error" in out_v6:
         if out_wg:
-            return web.Response(status=404)
+            return web.Response(status=500)
         else:
             return web.Response(body="bird error", status=500)
     else:
