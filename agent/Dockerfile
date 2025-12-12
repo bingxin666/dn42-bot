@@ -10,10 +10,13 @@ RUN apt-get update && \
     bird2 \
     vnstat \
     build-essential \
+    ca-certificates \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
-# Note: tcping should be installed separately. 
-# You can install it from https://github.com/nodeseeker/tcping or mount it as a volume
+# Install nodeseeker/tcping (static build)
+# Reference: https://github.com/nodeseeker/tcping
+RUN bash <(curl -Ls https://raw.githubusercontent.com/nodeseeker/tcping/main/install.sh) --force
 
 # Set working directory
 WORKDIR /app
