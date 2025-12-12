@@ -152,7 +152,7 @@ def restart_peer_confirm(region, message):
             (
                 f"Error encountered, please try again. If the problem remains, please contact {config.CONTACT}\n"
                 f"遇到错误，请重试。如果问题依旧，请联系 {config.CONTACT}\n"
-                f"\n`{error_info}`"
+                f"\nError Info：`{error_info}`"
             ),
             parse_mode="Markdown",
             reply_markup=ReplyKeyboardRemove(),

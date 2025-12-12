@@ -348,15 +348,12 @@ async def setup_peer(request):
         f.write(bird)
 
     # In container: directly bring interface up; do not touch systemd units
-    wg_ok = False
-    for _ in range(3):
-        try:
-            out_wg = simple_run(f"wg-quick up dn42-{peer_info['ASN']}", timeout=10)
-        except Exception:
-            out_wg = "wg-quick timeout or error"
-        if not out_wg:
-            wg_ok = True
-            break
+    # 仅执行一次 wg-quick up；按输出包含 "ip link delete dev" 判定错误
+    try:
+        out_wg = simple_run(f"wg-quick up dn42-{peer_info['ASN']}", timeout=10)
+    except Exception:
+        out_wg = "wg-quick timeout or error"
+    wg_ok = ("ip link delete dev" not in out_wg.lower())
     # 即便三次都失败，这里也不抛异常，由上层逻辑或人工排查
     simple_run(f"birdc -s {base.BIRD_CTL_PATH} c")
     if base.VNSTAT_AUTO_ADD:
@@ -412,23 +409,21 @@ async def restart_peer(request):
     except Exception:
         # 如果 down 失败（例如接口不存在），继续尝试 up
         pass
-    out_wg = "wg-quick timeout or error"
-    for _ in range(3):
-        try:
-            out_wg = simple_run(f"wg-quick up dn42-{asn}", timeout=10)
-        except Exception:
-            out_wg = "wg-quick timeout or error"
-        if not out_wg:
-            break
+    # 仅执行一次 wg-quick up；按输出包含 "ip link delete dev" 判定错误
+    try:
+        out_wg = simple_run(f"wg-quick up dn42-{asn}", timeout=10)
+    except Exception:
+        out_wg = "wg-quick timeout or error"
     out_v4 = simple_run(f"birdc -s {base.BIRD_CTL_PATH} restart DN42_{asn}_v4")
     out_v6 = simple_run(f"birdc -s {base.BIRD_CTL_PATH} restart DN42_{asn}_v6")
+    wg_error = ("ip link delete dev" in out_wg.lower())
     if "syntax error" in out_v4 and "syntax error" in out_v6:
-        if out_wg:
+        if wg_error:
             return web.Response(status=404)
         else:
             return web.Response(body="bird error", status=500)
     else:
-        if out_wg:
+        if wg_error:
             return web.Response(body="wg error", status=500)
         else:
             return web.Response(status=200)
