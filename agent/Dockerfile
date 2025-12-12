@@ -9,6 +9,7 @@ RUN apt-get update && \
     iproute2 \
     bird2 \
     vnstat \
+    build-essential \
     ca-certificates \
     git \
     golang-go \
