@@ -1,3 +1,15 @@
+# Build stage for tcping
+FROM golang:alpine AS tcping-builder
+
+RUN apk add --no-cache git
+
+# Build nodeseeker/tcping from source
+RUN set -e; \
+    git clone --depth 1 https://github.com/nodeseeker/tcping.git /tmp/tcping && \
+    cd /tmp/tcping && \
+    GOTOOLCHAIN=auto CGO_ENABLED=0 go build -trimpath -ldflags="-w -s" -o tcping ./src/main.go
+
+# Final stage
 FROM python:3.14-slim
 
 # Install system dependencies required by the agent
@@ -12,25 +24,11 @@ RUN apt-get update && \
     build-essential \
     ca-certificates \
     git \
-    golang-go \
     && rm -rf /var/lib/apt/lists/*
 
-# Build and install nodeseeker/tcping from source
-# Reference: https://github.com/nodeseeker/tcping
-RUN set -e; \
-    git clone --depth 1 https://github.com/nodeseeker/tcping.git /tmp/tcping && \
-    cd /tmp/tcping && \
-    arch=$(dpkg --print-architecture); \
-    case "$arch" in \
-        amd64)  GOARCH="amd64" ;; \
-        arm64)  GOARCH="arm64" ;; \
-        armhf)  GOARCH="arm" ;; \
-        *)      echo "Unsupported architecture: $arch" && exit 1 ;; \
-    esac; \
-    CGO_ENABLED=0 GOOS=linux GOARCH=$GOARCH go build -trimpath -ldflags="-w -s" -o tcping ./src/main.go && \
-    install -m 0755 tcping /usr/local/bin/tcping && \
-    cd / && \
-    rm -rf /tmp/tcping
+# Copy tcping binary from builder stage
+COPY --from=tcping-builder /tmp/tcping/tcping /usr/local/bin/tcping
+RUN chmod +x /usr/local/bin/tcping
 
 # Set working directory
 WORKDIR /app
