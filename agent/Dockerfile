@@ -9,14 +9,27 @@ RUN apt-get update && \
     iproute2 \
     bird2 \
     vnstat \
-    build-essential \
     ca-certificates \
     git \
+    golang-go \
     && rm -rf /var/lib/apt/lists/*
 
-# Install nodeseeker/tcping (static build)
+# Build and install nodeseeker/tcping from source
 # Reference: https://github.com/nodeseeker/tcping
-RUN curl -Ls https://raw.githubusercontent.com/nodeseeker/tcping/main/install.sh | bash -s -- --force
+RUN set -e; \
+    git clone --depth 1 https://github.com/nodeseeker/tcping.git /tmp/tcping && \
+    cd /tmp/tcping && \
+    arch=$(dpkg --print-architecture); \
+    case "$arch" in \
+        amd64)  GOARCH="amd64" ;; \
+        arm64)  GOARCH="arm64" ;; \
+        armhf)  GOARCH="arm" ;; \
+        *)      echo "Unsupported architecture: $arch" && exit 1 ;; \
+    esac; \
+    CGO_ENABLED=0 GOOS=linux GOARCH=$GOARCH go build -trimpath -ldflags="-w -s" -o tcping ./src/main.go && \
+    install -m 0755 tcping /usr/local/bin/tcping && \
+    cd / && \
+    rm -rf /tmp/tcping
 
 # Set working directory
 WORKDIR /app
