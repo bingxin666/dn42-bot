@@ -144,13 +144,15 @@ def restart_peer_confirm(region, message):
             timeout=10,
         )
         if r.status_code != 200:
-            raise RuntimeError
-    except BaseException:
+            raise RuntimeError(f"HTTP {r.status_code}: {r.text}")
+    except BaseException as e:
+        error_info = str(e) if str(e) else type(e).__name__
         bot.send_message(
             message.chat.id,
             (
                 f"Error encountered, please try again. If the problem remains, please contact {config.CONTACT}\n"
-                f"遇到错误，请重试。如果问题依旧，请联系 {config.CONTACT}"
+                f"遇到错误，请重试。如果问题依旧，请联系 {config.CONTACT}\n"
+                f"\n`{error_info}`"
             ),
             parse_mode="Markdown",
             reply_markup=ReplyKeyboardRemove(),
