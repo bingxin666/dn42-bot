@@ -9,10 +9,26 @@ RUN set -e; \
     cd /tmp/tcping && \
     GOTOOLCHAIN=auto CGO_ENABLED=0 go build -trimpath -ldflags="-w -s" -o tcping ./src/main.go
 
+# Python builder stage
+FROM python:3.14-slim AS python-builder
+
+WORKDIR /app
+
+# Install build dependencies temporarily (need full build toolchain for aiohttp)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    gcc \
+    libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy and install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+
 # Final stage
 FROM python:3.14-slim
 
-# Install system dependencies required by the agent
+# Install only runtime dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     iputils-ping \
@@ -21,7 +37,6 @@ RUN apt-get update && \
     iproute2 \
     bird2 \
     vnstat \
-    build-essential \
     ca-certificates \
     git \
     && rm -rf /var/lib/apt/lists/*
@@ -30,20 +45,18 @@ RUN apt-get update && \
 COPY --from=tcping-builder /tmp/tcping/tcping /usr/local/bin/tcping
 RUN chmod +x /usr/local/bin/tcping
 
+# Copy Python packages from builder
+COPY --from=python-builder /install /usr/local
+
 # Set working directory
 WORKDIR /app
-
-# Copy requirements first for better caching
-COPY requirements.txt .
-
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
 
-# Precompile Python bytecode to avoid compile on first run
-RUN python -m compileall -q /app
+# Precompile Python bytecode and remove unnecessary files
+RUN python -m compileall -q /app && \
+    find /app -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
 
 # Expose the API port (default 54321)
 EXPOSE 54321
