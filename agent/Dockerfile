@@ -16,7 +16,7 @@ RUN apt-get update && \
 
 # Install nodeseeker/tcping (static build)
 # Reference: https://github.com/nodeseeker/tcping
-RUN bash <(curl -Ls https://raw.githubusercontent.com/nodeseeker/tcping/main/install.sh) --force
+RUN curl -Ls https://raw.githubusercontent.com/nodeseeker/tcping/main/install.sh | bash -s -- --force
 
 # Set working directory
 WORKDIR /app
