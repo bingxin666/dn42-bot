@@ -10,7 +10,7 @@ from punycode import convert as punycode
 
 @bot.message_handler(commands=["dig", "nslookup"])
 def dig(message):
-    dig_type_whitelist = ["ANY", "A", "AAAA", "CNAME", "MX", "TXT", "NS", "SOA", "SRV", "PTR"]
+    dig_type_whitelist = ["A", "AAAA", "CNAME", "MX", "TXT", "NS", "SOA", "SRV", "PTR"]
     help_text = ", ".join(f"`{i}`" for i in dig_type_whitelist)
     help_text = (
         "Usage: /dig [domain] {type} {@dns_server}\n"
@@ -29,7 +29,7 @@ def dig(message):
         )
         return
     dig_server = ""
-    dig_type = "ANY"
+    dig_type = "A"
     try:
         t = [i for i in raw if i.startswith("@")]
         if len(t) > 1:

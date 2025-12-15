@@ -38,7 +38,6 @@ RUN apt-get update && \
     bird2 \
     vnstat \
     ca-certificates \
-    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy tcping binary from builder stage
