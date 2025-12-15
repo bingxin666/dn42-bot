@@ -109,7 +109,7 @@ def get_asn_mnt_text(asn):
 def basic_ip_domain_test(address):
     resolver = dns.resolver.Resolver()
 #    resolver.nameservers = ["127.0.0.1", "172.20.0.53", "172.23.0.53", "8.8.8.8", "8.8.4.4"]
-    resolver.nameservers = ["100.64.0.36", "172.20.0.53", "1.1.1.1"] # 对我自己的 DNS 服务器专门做的适配
+    resolver.nameservers = ["100.64.0.36","100.64.0.38", "172.20.0.53", "1.1.1.1", "8.8.8.8"] # 对我自己的 DNS 服务器专门做的适配
     resolver.timeout = 0.5
     resolver.lifetime = 3
     test_result = namedtuple("test_result", ["raw", "ipv4", "ipv6", "domain"])
