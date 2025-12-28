@@ -36,7 +36,6 @@ def main():
     
     print("Updating DN42 registry...")
     print(f"Source: {registry.REGISTRY_URL}")
-    print(f"Fallback: {registry.REGISTRY_URL_FALLBACK}")
     print(f"Destination: {registry.REGISTRY_PATH}")
     print()
     

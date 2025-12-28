@@ -18,6 +18,7 @@ from base import bot, db, db_privilege
 from pytz import utc
 from telebot.handler_backends import BaseMiddleware, CancelUpdate
 from telebot.types import BotCommandScopeAllPrivateChats, ReplyKeyboardRemove
+import subprocess
 
 
 class IsPrivateChat(telebot.custom_filters.SimpleCustomFilter):
@@ -148,10 +149,16 @@ def scheduler_add_job(func, *args, **kwargs):
     scheduler.add_job(func, *args, **kwargs)
 
 
+def run_update_registry():
+    script_path = os.path.join(os.path.dirname(__file__), "tools", "update_registry.py")
+    subprocess.run(["python3", script_path])
+
+
 scheduler_add_job(tools.servers_check, minute="*/3")
 scheduler_add_job(tools.get_map, kwargs={"update": True}, minute="*/3")
 scheduler_add_job(tools.update_china_ip, hour="1", minute="30")
 scheduler_add_job(tools.update_as_route_table, minute="7/15")
+scheduler.add_job(run_update_registry, trigger="cron", minute="*/5", id="dn42bot_update_registry", replace_existing=True)
 scheduler.start()
 
 
