@@ -237,7 +237,7 @@ def login_verify_code(asn, code, message):
             reply_markup=ReplyKeyboardRemove(),
         )
         return
-    if message.text.strip() == code:
+    if message.text.strip().lower() == code.lower():
         db[message.chat.id] = asn
         data_dir = "./data"
         os.makedirs(data_dir, exist_ok=True)
