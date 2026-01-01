@@ -18,7 +18,7 @@
 | DIG_ADDRESS         | The address of /dig                                                                            |
 
 ## TODO
- - [] 支持节点审批
+ - [ ] 支持节点审批
 
 以下为原 README 内容：
 
@@ -141,4 +141,5 @@ You should install a `tcping` command in the system. Currently, the agent only s
 ## Have a try
 
 My bot is deployed at [@Potat0_DN42_Bot](https://t.me/Potat0_DN42_Bot). Welcome to peer with me!
+
 
