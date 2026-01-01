@@ -46,7 +46,7 @@
   - [x] Block / Unblock an ASN
   - [x] Get blocked ASN list
 
-## 部署
+## Deploy
 
 The project is divided into two parts: server and agent, which can be deployed separately and have independent `requirements.txt`.
 
