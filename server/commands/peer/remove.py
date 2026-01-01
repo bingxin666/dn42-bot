@@ -122,19 +122,6 @@ def remove_peer_choose(removable, chosen, message):
         parse_mode="Markdown",
         reply_markup=ReplyKeyboardRemove(),
     )
-    if db[message.chat.id] // 10000 != 424242:
-        bot.send_message(
-            message.chat.id,
-            (
-                "Attention 注意\n\n"
-                "Your ASN is not in standard DN42 format (`AS424242xxxx`), so it cannot be auto-peered\n"
-                "你的 ASN 不是标准 DN42 格式 (`AS424242xxxx`)，因此无法进行 AutoPeer\n"
-                f"After deleting peer information, you need to contact {config.CONTACT} for manual operation if you need to re-peer.\n"
-                f"删除 Peer 信息后，如需重新 Peer，需要联系 {config.CONTACT} 进行人工操作。"
-            ),
-            parse_mode="Markdown",
-            reply_markup=ReplyKeyboardRemove(),
-        )
     msg = bot.send_message(
         message.chat.id,
         (
@@ -186,31 +173,17 @@ def remove_peer_confirm(code, region, last_info, message):
             reply_markup=ReplyKeyboardRemove(),
         )
         return
-    if db[message.chat.id] // 10000 == 424242:
-        bot.send_message(
-            message.chat.id,
-            (
-                "Peer information has been deleted.\n"
-                "Peer 信息已删除。\n"
-                "\n"
-                "You can always re-create it using /peer.\n"
-                "你可以随时使用 /peer 重新建立。"
-            ),
-            reply_markup=ReplyKeyboardRemove(),
-        )
-    else:
-        bot.send_message(
-            message.chat.id,
-            (
-                "Peer information has been deleted.\n"
-                "Peer 信息已删除。\n"
-                "\n"
-                f"Contact {config.CONTACT} if you need to re-peer.\n"
-                f"如需重新 Peer 请联系 {config.CONTACT}"
-            ),
-            parse_mode="Markdown",
-            reply_markup=ReplyKeyboardRemove(),
-        )
+    bot.send_message(
+        message.chat.id,
+        (
+            "Peer information has been deleted.\n"
+            "Peer 信息已删除。\n"
+            "\n"
+            "You can always re-create it using /peer.\n"
+            "你可以随时使用 /peer 重新建立。"
+        ),
+        reply_markup=ReplyKeyboardRemove(),
+    )
     for i in db_privilege - {message.chat.id}:
         bot.send_message(
             i,

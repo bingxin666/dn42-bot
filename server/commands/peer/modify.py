@@ -337,17 +337,6 @@ def post_action_choose(message, peer_info):
         )
         return "post_action_choose", peer_info, msg
     if message.text.strip() == "Region":
-        if (db[message.chat.id] // 10000 != 424242) and (message.chat.id not in db_privilege):
-            bot.send_message(
-                message.chat.id,
-                (
-                    f"Your ASN is not in standard DN42 format (`AS424242xxxx`), so it cannot be auto-migrated, please contact {config.CONTACT} for manual handling.\n"
-                    f"你的 ASN 不是标准 DN42 格式 (`AS424242xxxx`)，因此无法进行转移，请联系 {config.CONTACT} 进行人工处理。"
-                ),
-                parse_mode="Markdown",
-                reply_markup=ReplyKeyboardRemove(),
-            )
-            return
         return "pre_region", peer_info, message, "pre_session_type"
     elif message.text.strip() == "Session Type":
         return "pre_session_type", peer_info, message, "pre_clearnet"

@@ -106,6 +106,57 @@ def get_asn_mnt_text(asn):
         return f"AS{asn}"
 
 
+def get_asn_type(asn):
+    """
+    Determine the type of ASN.
+    
+    Args:
+        asn: The ASN number (int)
+        
+    Returns:
+        str: One of 'public', 'dn42', 'neonetwork', 'dn42_legacy'
+    """
+    if 4242420000 <= asn < 4242430000:
+        return 'dn42'
+    elif 4201270000 <= asn < 4201280000:
+        return 'neonetwork'
+    elif 64512 <= asn <= 65534 or 4200000000 <= asn < 4295000000:
+        # Other DN42/private ASN ranges (legacy)
+        return 'dn42_legacy'
+    else:
+        # Public ASN
+        return 'public'
+
+
+def get_port_by_asn(asn):
+    """
+    Generate port number based on ASN type.
+    
+    Port format:
+    - Public ASN: 1xxxx (prefix 1)
+    - DN42 ASN (424242xxxx): 2xxxx (prefix 2)
+    - NeoNetwork ASN (4201270xxx): 3xxxx (prefix 3)
+    - DN42 Legacy ASN (other private): 4xxxx (prefix 4)
+    
+    Args:
+        asn: The ASN number (int)
+        
+    Returns:
+        str: Port number as string
+    """
+    asn_type = get_asn_type(asn)
+    last_four = str(asn)[-4:]
+    
+    prefix_map = {
+        'public': '1',
+        'dn42': '2',
+        'neonetwork': '3',
+        'dn42_legacy': '4',
+    }
+    
+    return prefix_map[asn_type] + last_four
+
+
 def basic_ip_domain_test(address):
     resolver = dns.resolver.Resolver()
 #    resolver.nameservers = ["127.0.0.1", "172.20.0.53", "172.23.0.53", "8.8.8.8", "8.8.4.4"]

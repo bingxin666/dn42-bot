@@ -57,17 +57,6 @@ def init(message, peer_info):
     if message.chat.id not in db:
         tools.gen_login_message(message)
         return
-    if (db[message.chat.id] // 10000 != 424242) and (message.chat.id not in db_privilege):
-        bot.send_message(
-            message.chat.id,
-            (
-                f"Your ASN is not in standard DN42 format (`AS424242xxxx`), so it cannot be auto-peered, please contact {config.CONTACT} for manual peer.\n"
-                f"你的 ASN 不是标准 DN42 格式 (`AS424242xxxx`)，因此无法进行 AutoPeer，请联系 {config.CONTACT} 进行人工 Peer。"
-            ),
-            parse_mode="Markdown",
-            reply_markup=ReplyKeyboardRemove(),
-        )
-        return
     could_peer = set(base.servers.keys()) - set(tools.get_info(db[message.chat.id]).keys())
     if not could_peer:
         bot.send_message(
@@ -99,7 +88,7 @@ def init(message, peer_info):
         reply_markup=ReplyKeyboardRemove(),
     )
     peer_info["ASN"] = db[message.chat.id]
-    peer_info["Port"] = "2" + str(peer_info["ASN"])[-4:]
+    peer_info["Port"] = tools.get_port_by_asn(peer_info["ASN"])
     return "pre_region", peer_info, message
 
 
