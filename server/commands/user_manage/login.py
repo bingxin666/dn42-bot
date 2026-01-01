@@ -67,7 +67,13 @@ def get_email(asn):
 
 
 def get_auth(asn):
+    """获取 ASN 对应的 mntner 的认证方式 (auth)
+    
+    auth 字段存储在 mntner 文件中，而非 aut-num 文件中。
+    需要先从 aut-num 获取 mnt-by，然后从 mntner 获取 auth。
+    """
     try:
+        # 首先获取 ASN 的 mnt-by 字段
         whois_text = registry.get_whois_info_from_registry(str(asn))
         
         if whois_text:
@@ -79,10 +85,34 @@ def get_auth(asn):
                 .splitlines()[3:]
             )
         
-        auths = set()
+        # 从 ASN 信息中获取 mnt-by
+        mnt_by = None
         for line in whois:
+            if line.startswith("mnt-by:"):
+                mnt_by = line.split(":")[1].strip()
+                break
+        
+        if not mnt_by:
+            return set()
+        
+        # 从 mntner 获取 auth 字段
+        mntner_text = registry.get_whois_info_from_registry(mnt_by)
+        
+        if mntner_text:
+            mntner_whois = mntner_text.splitlines()
+        else:
+            mntner_whois = (
+                subprocess.check_output(shlex.split(f"whois -h {config.WHOIS_ADDRESS} {mnt_by}"), timeout=3)
+                .decode("utf-8")
+                .splitlines()[3:]
+            )
+        
+        auths = set()
+        for line in mntner_whois:
             if line.startswith("auth:"):
-                auth = line.split(":")[1].strip()
+                # auth 字段格式可能是 "auth: ssh-ed25519 AAAA..." 或 "auth: pgpkey-XXXX"
+                # 需要保留完整的值（冒号后的所有内容）
+                auth = line.split(":", 1)[1].strip()
                 auths.add(auth)
         return auths
     except BaseException:
@@ -256,15 +286,19 @@ def login_signature_challenge(asn, message):
         )
         return
     
-    # 解析认证方式，查找 GPG 指纹
+    # 解析认证方式，查找 GPG 指纹和 SSH 密钥
     gpg_fingerprints = []
     ssh_keys = []
     
     for auth in auths:
         auth_upper = auth.upper()
         if auth_upper.startswith("PGPKEY-"):
-            # GPG 格式: pgpkey-<fingerprint>
+            # GPG 格式1: pgpkey-<fingerprint>
             fingerprint = auth[7:]  # 去掉 "pgpkey-" 前缀
+            gpg_fingerprints.append(fingerprint)
+        elif auth_upper.startswith("PGP-FINGERPRINT "):
+            # GPG 格式2: pgp-fingerprint <fingerprint>
+            fingerprint = auth[16:]  # 去掉 "pgp-fingerprint " 前缀
             gpg_fingerprints.append(fingerprint)
         elif auth_upper.startswith("SSH-"):
             # SSH 格式: ssh-<algo> <key>
@@ -284,73 +318,288 @@ def login_signature_challenge(asn, message):
         )
         return
     
-    # 优先使用 GPG
-    if gpg_fingerprints:
-        # 生成挑战字符串
-        challenge = tools.gen_random_code(32)
+    # 如果同时有 GPG 和 SSH，让用户选择
+    if gpg_fingerprints and ssh_keys:
+        markup = ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.row_width = 1
+        markup.add(
+            KeyboardButton("🔐 GPG Signature GPG 签名"),
+            KeyboardButton("🔑 SSH Signature SSH 签名")
+        )
+        msg = bot.send_message(
+            message.chat.id,
+            (
+                "Multiple authentication methods found. Please choose one.\n"
+                "发现多种认证方式，请选择一种。\n"
+                "\n"
+                "Use /cancel to interrupt the operation.\n"
+                "使用 /cancel 终止操作。"
+            ),
+            reply_markup=markup,
+        )
+        bot.register_next_step_handler(msg, partial(login_choose_signature_type, asn, gpg_fingerprints, ssh_keys))
+    elif gpg_fingerprints:
+        # 只有 GPG
+        login_start_gpg_challenge(asn, gpg_fingerprints, message)
+    else:
+        # 只有 SSH
+        login_start_ssh_challenge(asn, ssh_keys, message)
+
+
+def login_choose_signature_type(asn, gpg_fingerprints, ssh_keys, message):
+    """选择签名类型（GPG 或 SSH）"""
+    if message.text.strip() == "/cancel":
+        bot.send_message(
+            message.chat.id,
+            "Current operation has been cancelled.\n当前操作已被取消。",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        return
+    
+    choice = message.text.strip()
+    
+    if "GPG" in choice:
+        login_start_gpg_challenge(asn, gpg_fingerprints, message)
+    elif "SSH" in choice:
+        login_start_ssh_challenge(asn, ssh_keys, message)
+    else:
+        markup = ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.row_width = 1
+        markup.add(
+            KeyboardButton("🔐 GPG Signature GPG 签名"),
+            KeyboardButton("🔑 SSH Signature SSH 签名")
+        )
+        msg = bot.send_message(
+            message.chat.id,
+            (
+                "Invalid choice. Please select GPG or SSH. Use /cancel to interrupt.\n"
+                "无效的选择。请选择 GPG 或 SSH。使用 /cancel 终止操作。"
+            ),
+            reply_markup=markup,
+        )
+        bot.register_next_step_handler(msg, partial(login_choose_signature_type, asn, gpg_fingerprints, ssh_keys))
+
+
+def login_start_gpg_challenge(asn, gpg_fingerprints, message):
+    """开始 GPG 签名挑战"""
+    # 如果有多个 GPG 指纹，让用户选择
+    if len(gpg_fingerprints) > 1:
+        markup = ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.row_width = 1
+        for fp in gpg_fingerprints:
+            # 显示指纹的前8位和后8位，方便识别
+            display_fp = f"{fp[:8]}...{fp[-8:]}" if len(fp) > 16 else fp
+            markup.add(KeyboardButton(f"🔐 {display_fp}"))
         
         fingerprint_list = "\n".join([f"- `{fp}`" for fp in gpg_fingerprints])
-        
         msg = bot.send_message(
             message.chat.id,
             (
-                "🔐 GPG Signature Challenge\n"
-                "🔐 GPG 签名挑战\n"
+                "Multiple GPG keys found. Please choose one.\n"
+                "发现多个 GPG 密钥，请选择一个。\n"
                 "\n"
-                f"Registry GPG Fingerprints:\n"
-                f"Registry 中的 GPG 指纹：\n"
+                f"Available fingerprints / 可用指纹：\n"
                 f"{fingerprint_list}\n"
                 "\n"
-                f"Challenge String / 挑战字符串:\n"
-                f"`{challenge}`\n"
-                "\n"
-                "Please sign the challenge string with your GPG private key and send the signature.\n"
-                "请使用你的 GPG 私钥对挑战字符串进行签名，并发送签名结果。\n"
-                "\n"
-                "Command / 命令:\n"
-                f"`echo '{challenge}' | gpg --clearsign`\n"
-                "\n"
-                "Send the complete signed message (including headers). Use /cancel to interrupt.\n"
-                "发送完整的签名消息（包括头部）。使用 /cancel 终止操作。"
+                "Use /cancel to interrupt the operation.\n"
+                "使用 /cancel 终止操作。"
             ),
             parse_mode="Markdown",
+            reply_markup=markup,
+        )
+        bot.register_next_step_handler(msg, partial(login_choose_gpg_key, asn, gpg_fingerprints))
+    else:
+        # 只有一个指纹，直接开始挑战
+        login_do_gpg_challenge(asn, gpg_fingerprints[0], message)
+
+
+def login_choose_gpg_key(asn, gpg_fingerprints, message):
+    """选择 GPG 密钥"""
+    if message.text.strip() == "/cancel":
+        bot.send_message(
+            message.chat.id,
+            "Current operation has been cancelled.\n当前操作已被取消。",
             reply_markup=ReplyKeyboardRemove(),
         )
-        bot.register_next_step_handler(msg, partial(login_signature_verify_gpg, asn, challenge, gpg_fingerprints))
+        return
+    
+    choice = message.text.strip()
+    
+    # 从选择中提取指纹
+    selected_fp = None
+    for fp in gpg_fingerprints:
+        display_fp = f"{fp[:8]}...{fp[-8:]}" if len(fp) > 16 else fp
+        if display_fp in choice or fp in choice:
+            selected_fp = fp
+            break
+    
+    if selected_fp:
+        login_do_gpg_challenge(asn, selected_fp, message)
     else:
-        # SSH 签名挑战
-        challenge = tools.gen_random_code(32)
-        
-        # 格式化 SSH 公钥列表
-        ssh_key_list = "\n".join([f"- `{key[:50]}...`" if len(key) > 50 else f"- `{key}`" for key in ssh_keys])
+        markup = ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.row_width = 1
+        for fp in gpg_fingerprints:
+            display_fp = f"{fp[:8]}...{fp[-8:]}" if len(fp) > 16 else fp
+            markup.add(KeyboardButton(f"🔐 {display_fp}"))
         
         msg = bot.send_message(
             message.chat.id,
             (
-                "🔑 SSH Signature Challenge\n"
-                "🔑 SSH 签名挑战\n"
+                "Invalid choice. Please select a GPG key. Use /cancel to interrupt.\n"
+                "无效的选择。请选择一个 GPG 密钥。使用 /cancel 终止操作。"
+            ),
+            reply_markup=markup,
+        )
+        bot.register_next_step_handler(msg, partial(login_choose_gpg_key, asn, gpg_fingerprints))
+
+
+def login_do_gpg_challenge(asn, gpg_fingerprint, message):
+    """执行 GPG 签名挑战"""
+    challenge = tools.gen_random_code(32)
+    
+    msg = bot.send_message(
+        message.chat.id,
+        (
+            "🔐 GPG Signature Challenge\n"
+            "🔐 GPG 签名挑战\n"
+            "\n"
+            f"Selected GPG Fingerprint / 选择的 GPG 指纹：\n"
+            f"- `{gpg_fingerprint}`\n"
+            "\n"
+            f"Challenge String / 挑战字符串:\n"
+            f"`{challenge}`\n"
+            "\n"
+            "Please sign the challenge string with your GPG private key and send the signature.\n"
+            "请使用你的 GPG 私钥对挑战字符串进行签名，并发送签名结果。\n"
+            "\n"
+            "Command / 命令:\n"
+            f"`echo -n '{challenge}' | gpg --clearsign`\n"
+            "\n"
+            "Send the complete signed message (including headers). Use /cancel to interrupt.\n"
+            "发送完整的签名消息（包括头部）。使用 /cancel 终止操作。"
+        ),
+        parse_mode="Markdown",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+    # 只用选择的指纹进行验证
+    bot.register_next_step_handler(msg, partial(login_signature_verify_gpg, asn, challenge, [gpg_fingerprint]))
+
+
+def login_start_ssh_challenge(asn, ssh_keys, message):
+    """开始 SSH 签名挑战"""
+    # 如果有多个 SSH 密钥，让用户选择
+    if len(ssh_keys) > 1:
+        markup = ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.row_width = 1
+        for i, key in enumerate(ssh_keys):
+            # 提取密钥类型和部分指纹
+            parts = key.split()
+            key_type = parts[0] if parts else "ssh"
+            # 显示密钥类型和公钥的前20个字符
+            key_preview = parts[1][:20] + "..." if len(parts) > 1 and len(parts[1]) > 20 else (parts[1] if len(parts) > 1 else "")
+            markup.add(KeyboardButton(f"🔑 {i+1}. {key_type} {key_preview}"))
+        
+        ssh_key_list = "\n".join([f"{i+1}. `{key[:60]}...`" if len(key) > 60 else f"{i+1}. `{key}`" for i, key in enumerate(ssh_keys)])
+        msg = bot.send_message(
+            message.chat.id,
+            (
+                "Multiple SSH keys found. Please choose one.\n"
+                "发现多个 SSH 密钥，请选择一个。\n"
                 "\n"
-                f"Registry SSH Public Keys:\n"
-                f"Registry 中的 SSH 公钥：\n"
+                f"Available keys / 可用密钥：\n"
                 f"{ssh_key_list}\n"
                 "\n"
-                f"Challenge String / 挑战字符串:\n"
-                f"`{challenge}`\n"
-                "\n"
-                "Please sign the challenge string with your SSH private key and send the signature.\n"
-                "请使用你的 SSH 私钥对挑战字符串进行签名，并发送签名结果。\n"
-                "\n"
-                "Commands / 命令:\n"
-                f"`echo '{challenge}' > challenge.txt`\n"
-                f"`ssh-keygen -Y sign -f ~/.ssh/id_rsa -n file challenge.txt`\n"
-                "\n"
-                "Send the content of challenge.txt.sig file. Use /cancel to interrupt.\n"
-                "发送 challenge.txt.sig 文件的内容。使用 /cancel 终止操作。"
+                "Use /cancel to interrupt the operation.\n"
+                "使用 /cancel 终止操作。"
             ),
             parse_mode="Markdown",
+            reply_markup=markup,
+        )
+        bot.register_next_step_handler(msg, partial(login_choose_ssh_key, asn, ssh_keys))
+    else:
+        # 只有一个密钥，直接开始挑战
+        login_do_ssh_challenge(asn, ssh_keys[0], message)
+
+
+def login_choose_ssh_key(asn, ssh_keys, message):
+    """选择 SSH 密钥"""
+    if message.text.strip() == "/cancel":
+        bot.send_message(
+            message.chat.id,
+            "Current operation has been cancelled.\n当前操作已被取消。",
             reply_markup=ReplyKeyboardRemove(),
         )
-        bot.register_next_step_handler(msg, partial(login_signature_verify_ssh, asn, challenge, ssh_keys))
+        return
+    
+    choice = message.text.strip()
+    
+    # 从选择中提取序号
+    selected_key = None
+    for i, key in enumerate(ssh_keys):
+        if f"{i+1}." in choice or f"{i+1}. " in choice:
+            selected_key = key
+            break
+        # 也检查密钥内容匹配
+        parts = key.split()
+        if len(parts) > 1 and parts[1][:20] in choice:
+            selected_key = key
+            break
+    
+    if selected_key:
+        login_do_ssh_challenge(asn, selected_key, message)
+    else:
+        markup = ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.row_width = 1
+        for i, key in enumerate(ssh_keys):
+            parts = key.split()
+            key_type = parts[0] if parts else "ssh"
+            key_preview = parts[1][:20] + "..." if len(parts) > 1 and len(parts[1]) > 20 else (parts[1] if len(parts) > 1 else "")
+            markup.add(KeyboardButton(f"🔑 {i+1}. {key_type} {key_preview}"))
+        
+        msg = bot.send_message(
+            message.chat.id,
+            (
+                "Invalid choice. Please select an SSH key. Use /cancel to interrupt.\n"
+                "无效的选择。请选择一个 SSH 密钥。使用 /cancel 终止操作。"
+            ),
+            reply_markup=markup,
+        )
+        bot.register_next_step_handler(msg, partial(login_choose_ssh_key, asn, ssh_keys))
+
+
+def login_do_ssh_challenge(asn, ssh_key, message):
+    """执行 SSH 签名挑战"""
+    challenge = tools.gen_random_code(32)
+    
+    # 格式化显示密钥
+    ssh_key_display = f"`{ssh_key[:60]}...`" if len(ssh_key) > 60 else f"`{ssh_key}`"
+    
+    msg = bot.send_message(
+        message.chat.id,
+        (
+            "🔑 SSH Signature Challenge\n"
+            "🔑 SSH 签名挑战\n"
+            "\n"
+            f"Selected SSH Public Key / 选择的 SSH 公钥：\n"
+            f"- {ssh_key_display}\n"
+            "\n"
+            f"Challenge String / 挑战字符串:\n"
+            f"`{challenge}`\n"
+            "\n"
+            "Please sign the challenge string with your SSH private key and send the signature.\n"
+            "请使用你的 SSH 私钥对挑战字符串进行签名，并发送签名结果。\n"
+            "\n"
+            "Command / 命令:\n"
+            f"`echo -n '{challenge}' | ssh-keygen -Y sign -f ~/.ssh/id_ed25519 -n file`\n"
+            "\n"
+            "Send the output signature. Use /cancel to interrupt.\n"
+            "发送输出的签名内容。使用 /cancel 终止操作。"
+        ),
+        parse_mode="Markdown",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+    # 只用选择的密钥进行验证
+    bot.register_next_step_handler(msg, partial(login_signature_verify_ssh, asn, challenge, [ssh_key]))
 
 
 def login_signature_verify_gpg(asn, challenge, gpg_fingerprints, message):
@@ -501,7 +750,7 @@ def login_signature_verify_ssh(asn, challenge, ssh_keys, message):
         allowed_signers_file = os.path.join(temp_dir, "allowed_signers")
         
         try:
-            # 写入挑战字符串
+            # 写入挑战字符串（不带换行符，命令使用 echo -n）
             with open(challenge_file, 'w') as f:
                 f.write(challenge)
             
@@ -533,8 +782,8 @@ def login_signature_verify_ssh(asn, challenge, ssh_keys, message):
                         timeout=5
                     )
                     
-                    # 检查返回码和输出
-                    if result.returncode == 0 and 'Good' in result.stderr:
+                    # 检查返回码和输出（Good 可能在 stdout 或 stderr）
+                    if result.returncode == 0 and ('Good' in result.stdout or 'Good' in result.stderr):
                         verified = True
                         break
                 except Exception:
