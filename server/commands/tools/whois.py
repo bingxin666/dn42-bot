@@ -102,6 +102,17 @@ def another_whois(message):
         )
         return
     bot.send_chat_action(chat_id=message.chat.id, action="typing")
+    # 预处理简略 ASN 输入
+    try:
+        asn = int(whois_str)
+        if asn < 10000:
+            whois_str = f"424242{asn:04d}"
+        elif 20000 <= asn < 30000:
+            whois_str = f"42424{asn}"
+        else:
+            whois_str = f"{asn}"
+    except ValueError:
+        pass
     whois_command = f"whois -h {config.WHOIS_ADDRESS} {whois_str}"
     while True:
         try:
