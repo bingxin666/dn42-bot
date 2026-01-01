@@ -9,6 +9,8 @@ RUN apt-get update && \
     whois \
     build-essential \
     git \
+    gpg \
+    openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Note: tcping should be installed separately. 
