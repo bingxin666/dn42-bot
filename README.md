@@ -2,8 +2,11 @@
 
 **这是 [Potat0000/dn42-bot](https://github.com/Potat0000/dn42-bot) 的 Fork 版本**，根据我自己的需求添加了部分功能。
 
+欢迎在 Telegram 中使用 [@baka_lg_bot](t.me/baka_lg_bot) 和我进行 Peer！
+
 ## 新增功能
  - 支持了 [Docker 部署](DOCKER.md)
+ - 支持了通过 SSH / GPG 进行 ASN 登录
  - 修改了部分 whois 请求为本地拉取仓库进行遍历
  - 修改了默认数据存放位置
  - 新增了部分参数
@@ -13,6 +16,9 @@
 | Config Key          | Description                                                                                    |
 | ------------------- | ---------------------------------------------------------------------------------------------- |
 | DIG_ADDRESS         | The address of /dig                                                                            |
+
+## TODO
+ - [] 支持节点审批
 
 以下为原 README 内容：
 
@@ -46,19 +52,9 @@
   - [x] Block / Unblock an ASN
   - [x] Get blocked ASN list
 
-## Deploy
+## Deployment
 
 The project is divided into two parts: server and agent, which can be deployed separately and have independent `requirements.txt`.
-
-### Docker Deployment (Recommended)
-
-For Docker deployment, please see [DOCKER.md](DOCKER.md) for detailed instructions on:
-- Building Docker images
-- Running containers
-- Using Docker Compose
-- Using pre-built images from GitHub Container Registry
-
-### Manual Deployment
 
 ### Server
 
