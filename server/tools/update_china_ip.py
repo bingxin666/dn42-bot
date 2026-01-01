@@ -6,7 +6,7 @@ import requests
 
 def update_china_ip():
     try:
-        ChinaIPv4_RAW = requests.get("https://raw.githubusercontent.com/bingxin666/china-ip-list/master/chnroute.txt", timeout=30).text
+        ChinaIPv4_RAW = requests.get("https://raw.githubusercontent.com/metowolf/iplist/master/data/special/china.txt", timeout=30).text
         base.ChinaIPv4 = [
             IPv4Network(i.strip()) for i in ChinaIPv4_RAW.splitlines() if i != "" and not i.startswith("#")
         ]
