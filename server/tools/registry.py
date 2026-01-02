@@ -180,6 +180,31 @@ def find_person_file(person_id: str) -> Optional[str]:
     return None
 
 
+def find_organisation_file(org_id: str) -> Optional[str]:
+    """
+    Find the registry file for a given organisation.
+    
+    Args:
+        org_id: The organisation identifier
+        
+    Returns:
+        Path to the file if found, None otherwise
+    """
+    if not os.path.exists(REGISTRY_PATH):
+        return None
+    
+    # Organisation files are stored in data/organisation/
+    org_dir = os.path.join(REGISTRY_PATH, "data", "organisation")
+    if not os.path.exists(org_dir):
+        return None
+    
+    org_file = os.path.join(org_dir, org_id)
+    if os.path.exists(org_file):
+        return org_file
+    
+    return None
+
+
 def find_mntner_file(mntner_id: str) -> Optional[str]:
     """
     Find the registry file for a given maintainer.
@@ -255,6 +280,16 @@ def get_whois_info_from_registry(query: str) -> Optional[str]:
                 return f.read().strip()
         except (IOError, OSError) as e:
             print(f"Error reading mntner file {file_path}: {e}")
+            return None
+    
+    # Try as organisation
+    file_path = find_organisation_file(query)
+    if file_path:
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                return f.read().strip()
+        except (IOError, OSError) as e:
+            print(f"Error reading organisation file {file_path}: {e}")
             return None
     
     return None

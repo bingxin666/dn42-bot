@@ -35,6 +35,7 @@ def send_welcome(message):
             "  - /path [ip/domain]\n"
             "  - /whois [something]\n"
             "  - /dig [domain] {type}\n"
+            "  - /findnoc [asn]\n"
             "\n"
             "User Manage:\n"
             "  - /login\n"

@@ -8,8 +8,10 @@
  - 支持了 [Docker 部署](DOCKER.md)
  - 支持了通过 SSH / GPG 进行 ASN 登录
  - 支持了非 DN42 ASN 的自助 Peer
+ - 支持了 `findnoc` 指令
  - 修改了部分 whois 请求为本地拉取仓库进行遍历
  - 修改了默认数据存放位置
+ - 修改了 `login` 的相关逻辑以支持 Org 类的 ASN 登录
  - 新增了部分参数
 
 ## 新增配置

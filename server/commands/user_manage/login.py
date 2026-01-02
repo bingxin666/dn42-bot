@@ -13,54 +13,102 @@ from tools import registry
 
 
 def get_email(asn):
-    try:
-        # Try to get from local registry first
-        admin_c = None
-        whois1_text = registry.get_whois_info_from_registry(str(asn))
+    """获取 ASN 关联的所有 email 地址
+    
+    支持递归查找：如果 admin-c 指向 role/organisation，会继续查找其 admin-c/tech-c
+    
+    Args:
+        asn: AS号
         
-        if whois1_text:
-            whois1 = whois1_text.splitlines()
-        else:
-            # Fallback to whois command
-            whois1 = (
-                subprocess.check_output(shlex.split(f"whois -h {config.WHOIS_ADDRESS} {asn}"), timeout=3)
-                .decode("utf-8")
-                .splitlines()[3:]
-            )
+    Returns:
+        set: email 地址集合
+    """
+    def extract_emails_from_text(text):
+        """从文本中提取所有 email 地址"""
+        emails = set()
+        for line in text.splitlines():
+            if line.startswith("e-mail:") or line.startswith("abuse-mailbox:"):
+                email = line.split(":", 1)[1].strip()
+                if re.fullmatch(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", email):
+                    emails.add(email)
+            elif line.startswith("contact:"):
+                # contact 字段也可能包含 email
+                email = line.split(":", 1)[1].strip()
+                if re.fullmatch(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", email):
+                    emails.add(email)
+        return emails
+    
+    def extract_contacts_from_text(text):
+        """从文本中提取 admin-c 和 tech-c"""
+        contacts = set()
+        for line in text.splitlines():
+            if line.startswith("admin-c:") or line.startswith("tech-c:"):
+                contact = line.split(":", 1)[1].strip()
+                if contact:
+                    contacts.add(contact)
+        return contacts
+    
+    def get_contact_text(contact_id):
+        """获取 contact 的 whois 信息"""
+        text = registry.get_whois_info_from_registry(contact_id)
+        if text:
+            return text
+        # Fallback to whois command
+        try:
+            return subprocess.check_output(
+                shlex.split(f"whois -h {config.WHOIS_ADDRESS} {contact_id}"),
+                timeout=3
+            ).decode("utf-8")
+        except BaseException:
+            return None
+    
+    def recursive_get_emails(contact_id, visited=None, depth=0):
+        """递归获取 contact 及其子 contact 的所有 email"""
+        if visited is None:
+            visited = set()
         
-        for line in whois1:
-            if line.startswith("admin-c:"):
-                admin_c = line.split(":")[1].strip()
-                break
+        # 防止无限递归和循环引用
+        if contact_id in visited or depth > 5:
+            return set()
+        visited.add(contact_id)
         
-        # Return early if no admin-c found
-        if not admin_c:
+        contact_text = get_contact_text(contact_id)
+        if not contact_text:
             return set()
         
-        # Try to get admin-c info from local registry
-        whois2_text = registry.get_whois_info_from_registry(admin_c)
+        emails = extract_emails_from_text(contact_text)
         
-        if whois2_text:
-            whois2 = whois2_text.splitlines()
-        else:
+        # 如果当前 contact 没有 email，继续查找其 admin-c/tech-c
+        if not emails:
+            sub_contacts = extract_contacts_from_text(contact_text)
+            for sub_contact in sub_contacts:
+                emails.update(recursive_get_emails(sub_contact, visited, depth + 1))
+        
+        return emails
+    
+    try:
+        # 从本地 registry 获取 ASN 信息
+        whois_text = registry.get_whois_info_from_registry(str(asn))
+        
+        if not whois_text:
             # Fallback to whois command
-            whois2 = (
-                subprocess.check_output(shlex.split(f"whois -h {config.WHOIS_ADDRESS} {admin_c}"), timeout=3)
-                .decode("utf-8")
-                .splitlines()[3:]
-            )
+            whois_text = subprocess.check_output(
+                shlex.split(f"whois -h {config.WHOIS_ADDRESS} {asn}"),
+                timeout=3
+            ).decode("utf-8")
         
+        # 收集 admin-c 和 tech-c
+        contacts = extract_contacts_from_text(whois_text)
+        
+        if not contacts:
+            return set()
+        
+        # 递归获取所有 email
         emails = set()
-        for line in whois2:
-            if line.startswith("e-mail:"):
-                email = line.split(":")[1].strip()
-                if re.fullmatch(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", email):
-                    emails.add(email)
-        for line in whois2:
-            if line.startswith("contact:"):
-                email = line.split(":")[1].strip()
-                if re.fullmatch(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", email):
-                    emails.add(email)
+        visited = set()
+        for contact in contacts:
+            emails.update(recursive_get_emails(contact, visited))
+        
         return emails
     except BaseException:
         return set()
