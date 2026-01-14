@@ -14,12 +14,12 @@ from tools import registry
 
 def get_email(asn):
     """获取 ASN 关联的所有 email 地址
-    
+
     支持递归查找：如果 admin-c 指向 role/organisation，会继续查找其 admin-c/tech-c
-    
+
     Args:
         asn: AS号
-        
+
     Returns:
         set: email 地址集合
     """
@@ -37,7 +37,7 @@ def get_email(asn):
                 if re.fullmatch(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", email):
                     emails.add(email)
         return emails
-    
+
     def extract_contacts_from_text(text):
         """从文本中提取 admin-c 和 tech-c"""
         contacts = set()
@@ -47,7 +47,7 @@ def get_email(asn):
                 if contact:
                     contacts.add(contact)
         return contacts
-    
+
     def get_contact_text(contact_id):
         """获取 contact 的 whois 信息"""
         text = registry.get_whois_info_from_registry(contact_id)
@@ -61,54 +61,54 @@ def get_email(asn):
             ).decode("utf-8")
         except BaseException:
             return None
-    
+
     def recursive_get_emails(contact_id, visited=None, depth=0):
         """递归获取 contact 及其子 contact 的所有 email"""
         if visited is None:
             visited = set()
-        
+
         # 防止无限递归和循环引用
         if contact_id in visited or depth > 5:
             return set()
         visited.add(contact_id)
-        
+
         contact_text = get_contact_text(contact_id)
         if not contact_text:
             return set()
-        
+
         emails = extract_emails_from_text(contact_text)
-        
+
         # 如果当前 contact 没有 email，继续查找其 admin-c/tech-c
         if not emails:
             sub_contacts = extract_contacts_from_text(contact_text)
             for sub_contact in sub_contacts:
                 emails.update(recursive_get_emails(sub_contact, visited, depth + 1))
-        
+
         return emails
-    
+
     try:
         # 从本地 registry 获取 ASN 信息
         whois_text = registry.get_whois_info_from_registry(str(asn))
-        
+
         if not whois_text:
             # Fallback to whois command
             whois_text = subprocess.check_output(
                 shlex.split(f"whois -h {config.WHOIS_ADDRESS} {asn}"),
                 timeout=3
             ).decode("utf-8")
-        
+
         # 收集 admin-c 和 tech-c
         contacts = extract_contacts_from_text(whois_text)
-        
+
         if not contacts:
             return set()
-        
+
         # 递归获取所有 email
         emails = set()
         visited = set()
         for contact in contacts:
             emails.update(recursive_get_emails(contact, visited))
-        
+
         return emails
     except BaseException:
         return set()
@@ -116,14 +116,14 @@ def get_email(asn):
 
 def get_auth(asn):
     """获取 ASN 对应的 mntner 的认证方式 (auth)
-    
+
     auth 字段存储在 mntner 文件中，而非 aut-num 文件中。
     需要先从 aut-num 获取 mnt-by，然后从 mntner 获取 auth。
     """
     try:
         # 首先获取 ASN 的 mnt-by 字段
         whois_text = registry.get_whois_info_from_registry(str(asn))
-        
+
         if whois_text:
             whois = whois_text.splitlines()
         else:
@@ -132,20 +132,20 @@ def get_auth(asn):
                 .decode("utf-8")
                 .splitlines()[3:]
             )
-        
+
         # 从 ASN 信息中获取 mnt-by
         mnt_by = None
         for line in whois:
             if line.startswith("mnt-by:"):
                 mnt_by = line.split(":")[1].strip()
                 break
-        
+
         if not mnt_by:
             return set()
-        
+
         # 从 mntner 获取 auth 字段
         mntner_text = registry.get_whois_info_from_registry(mnt_by)
-        
+
         if mntner_text:
             mntner_whois = mntner_text.splitlines()
         else:
@@ -154,7 +154,7 @@ def get_auth(asn):
                 .decode("utf-8")
                 .splitlines()[3:]
             )
-        
+
         auths = set()
         for line in mntner_whois:
             if line.startswith("auth:"):
@@ -243,9 +243,9 @@ def login_choose_auth_method(asn, message):
             reply_markup=ReplyKeyboardRemove(),
         )
         return
-    
+
     choice = message.text.strip()
-    
+
     # 邮箱验证
     if "Email" in choice or "邮箱" in choice:
         login_start_email_verification(asn, message)
@@ -286,9 +286,9 @@ def login_start_email_verification(asn, message):
 
 def login_signature_challenge(asn, message):
     """签名挑战验证
-    
+
     自动从 registry 中获取用户的认证方式（GPG/SSH）
-    
+
     Args:
         asn: AS号
         message: 消息对象
@@ -316,10 +316,10 @@ def login_signature_challenge(asn, message):
             reply_markup=ReplyKeyboardRemove(),
         )
         return
-    
+
     # 获取认证方式
     auths = get_auth(asn)
-    
+
     if not auths:
         bot.send_message(
             message.chat.id,
@@ -333,25 +333,25 @@ def login_signature_challenge(asn, message):
             reply_markup=ReplyKeyboardRemove(),
         )
         return
-    
+
     # 解析认证方式，查找 GPG 指纹和 SSH 密钥
     gpg_fingerprints = []
     ssh_keys = []
-    
+
     for auth in auths:
         auth_upper = auth.upper()
         if auth_upper.startswith("PGPKEY-"):
             # GPG 格式1: pgpkey-<fingerprint>
-            fingerprint = auth[7:]  # 去掉 "pgpkey-" 前缀
+            fingerprint = auth[7:].strip().replace(' ', '')
             gpg_fingerprints.append(fingerprint)
         elif auth_upper.startswith("PGP-FINGERPRINT "):
             # GPG 格式2: pgp-fingerprint <fingerprint>
-            fingerprint = auth[16:]  # 去掉 "pgp-fingerprint " 前缀
+            fingerprint = auth[16:].strip().replace(' ', '')
             gpg_fingerprints.append(fingerprint)
         elif auth_upper.startswith("SSH-"):
             # SSH 格式: ssh-<algo> <key>
             ssh_keys.append(auth)
-    
+
     if not gpg_fingerprints and not ssh_keys:
         bot.send_message(
             message.chat.id,
@@ -365,7 +365,7 @@ def login_signature_challenge(asn, message):
             reply_markup=ReplyKeyboardRemove(),
         )
         return
-    
+
     # 如果同时有 GPG 和 SSH，让用户选择
     if gpg_fingerprints and ssh_keys:
         markup = ReplyKeyboardMarkup(resize_keyboard=True)
@@ -403,9 +403,9 @@ def login_choose_signature_type(asn, gpg_fingerprints, ssh_keys, message):
             reply_markup=ReplyKeyboardRemove(),
         )
         return
-    
+
     choice = message.text.strip()
-    
+
     if "GPG" in choice:
         login_start_gpg_challenge(asn, gpg_fingerprints, message)
     elif "SSH" in choice:
@@ -438,7 +438,7 @@ def login_start_gpg_challenge(asn, gpg_fingerprints, message):
             # 显示指纹的前8位和后8位，方便识别
             display_fp = f"{fp[:8]}...{fp[-8:]}" if len(fp) > 16 else fp
             markup.add(KeyboardButton(f"🔐 {display_fp}"))
-        
+
         fingerprint_list = "\n".join([f"- `{fp}`" for fp in gpg_fingerprints])
         msg = bot.send_message(
             message.chat.id,
@@ -470,9 +470,9 @@ def login_choose_gpg_key(asn, gpg_fingerprints, message):
             reply_markup=ReplyKeyboardRemove(),
         )
         return
-    
+
     choice = message.text.strip()
-    
+
     # 从选择中提取指纹
     selected_fp = None
     for fp in gpg_fingerprints:
@@ -480,7 +480,7 @@ def login_choose_gpg_key(asn, gpg_fingerprints, message):
         if display_fp in choice or fp in choice:
             selected_fp = fp
             break
-    
+
     if selected_fp:
         login_do_gpg_challenge(asn, selected_fp, message)
     else:
@@ -489,7 +489,7 @@ def login_choose_gpg_key(asn, gpg_fingerprints, message):
         for fp in gpg_fingerprints:
             display_fp = f"{fp[:8]}...{fp[-8:]}" if len(fp) > 16 else fp
             markup.add(KeyboardButton(f"🔐 {display_fp}"))
-        
+
         msg = bot.send_message(
             message.chat.id,
             (
@@ -501,12 +501,11 @@ def login_choose_gpg_key(asn, gpg_fingerprints, message):
         bot.register_next_step_handler(msg, partial(login_choose_gpg_key, asn, gpg_fingerprints))
 
 
-def login_do_gpg_challenge(asn, gpg_fingerprint, message):
-    """执行 GPG 签名挑战"""
-    challenge = tools.gen_random_code(32)
-    
+def send_gpg_challenge_message(chat_id, gpg_fingerprint, challenge, key_status=None):
+    key_status_text = f"{key_status}\n\n" if key_status else ""
+
     msg = bot.send_message(
-        message.chat.id,
+        chat_id,
         (
             "🔐 GPG Signature Challenge\n"
             "🔐 GPG 签名挑战\n"
@@ -514,6 +513,7 @@ def login_do_gpg_challenge(asn, gpg_fingerprint, message):
             f"Selected GPG Fingerprint / 选择的 GPG 指纹：\n"
             f"- `{gpg_fingerprint}`\n"
             "\n"
+            f"{key_status_text}"
             f"Challenge String / 挑战字符串:\n"
             f"`{challenge}`\n"
             "\n"
@@ -529,7 +529,55 @@ def login_do_gpg_challenge(asn, gpg_fingerprint, message):
         parse_mode="Markdown",
         reply_markup=ReplyKeyboardRemove(),
     )
-    # 只用选择的指纹进行验证
+    return msg
+
+
+def login_do_gpg_challenge(asn, gpg_fingerprint, message):
+    """执行 GPG 签名挑战"""
+    challenge = tools.gen_random_code(32)
+
+    # 在提示用户签名之前，先确保本地有对应公钥（自动拉取失败则引导手动导入）
+    key_status = None
+    if gpg_has_public_key(gpg_fingerprint):
+        key_status = "✅ Public key found locally. / ✅ 公钥已在本地找到。"
+    else:
+        success, _ = fetch_gpg_key_from_keyserver(gpg_fingerprint)
+        if success or gpg_has_public_key(gpg_fingerprint):
+            key_status = "✅ Public key fetched from keyserver. / ✅ 公钥已从密钥服务器获取。"
+        else:
+            bot.send_message(
+                message.chat.id,
+                (
+                    "⚠️ Public key not found locally and failed to fetch from keyserver.\n"
+                    "⚠️ 本地未找到公钥，且从密钥服务器拉取失败。\n"
+                    "\n"
+                    "Please import your public key manually:\n"
+                    "请手动导入你的公钥：\n"
+                    "\n"
+                    "Export command (KEYID/FPR/EMAIL are all acceptable):\n"
+                    "导出命令（KEYID/指纹/邮箱均可）：\n"
+                    f"- `gpg --armor --export {gpg_fingerprint}`\n"
+                    "\n"
+                    "Then paste the complete public key block (starts with `-----BEGIN PGP PUBLIC KEY BLOCK-----`).\n"
+                    "然后粘贴完整的公钥块（以 `-----BEGIN PGP PUBLIC KEY BLOCK-----` 开头）。\n"
+                    "Use /cancel to interrupt.\n"
+                    "使用 /cancel 终止操作。"
+                ),
+                parse_mode="Markdown",
+                reply_markup=ReplyKeyboardRemove(),
+            )
+            msg = bot.send_message(
+                message.chat.id,
+                "Please paste your GPG public key (ASCII armor) and send it.\n请粘贴你的 GPG 公钥（ASCII armor）并发送。",
+                reply_markup=ReplyKeyboardRemove(),
+            )
+            bot.register_next_step_handler(
+                msg,
+                partial(login_import_gpg_key, asn, challenge, [gpg_fingerprint]),
+            )
+            return
+
+    msg = send_gpg_challenge_message(message.chat.id, gpg_fingerprint, challenge, key_status=key_status)
     bot.register_next_step_handler(msg, partial(login_signature_verify_gpg, asn, challenge, [gpg_fingerprint]))
 
 
@@ -546,7 +594,7 @@ def login_start_ssh_challenge(asn, ssh_keys, message):
             # 显示密钥类型和公钥的前20个字符
             key_preview = parts[1][:20] + "..." if len(parts) > 1 and len(parts[1]) > 20 else (parts[1] if len(parts) > 1 else "")
             markup.add(KeyboardButton(f"🔑 {i+1}. {key_type} {key_preview}"))
-        
+
         ssh_key_list = "\n".join([f"{i+1}. `{key[:60]}...`" if len(key) > 60 else f"{i+1}. `{key}`" for i, key in enumerate(ssh_keys)])
         msg = bot.send_message(
             message.chat.id,
@@ -578,9 +626,9 @@ def login_choose_ssh_key(asn, ssh_keys, message):
             reply_markup=ReplyKeyboardRemove(),
         )
         return
-    
+
     choice = message.text.strip()
-    
+
     # 从选择中提取序号
     selected_key = None
     for i, key in enumerate(ssh_keys):
@@ -592,7 +640,7 @@ def login_choose_ssh_key(asn, ssh_keys, message):
         if len(parts) > 1 and parts[1][:20] in choice:
             selected_key = key
             break
-    
+
     if selected_key:
         login_do_ssh_challenge(asn, selected_key, message)
     else:
@@ -603,7 +651,7 @@ def login_choose_ssh_key(asn, ssh_keys, message):
             key_type = parts[0] if parts else "ssh"
             key_preview = parts[1][:20] + "..." if len(parts) > 1 and len(parts[1]) > 20 else (parts[1] if len(parts) > 1 else "")
             markup.add(KeyboardButton(f"🔑 {i+1}. {key_type} {key_preview}"))
-        
+
         msg = bot.send_message(
             message.chat.id,
             (
@@ -618,10 +666,10 @@ def login_choose_ssh_key(asn, ssh_keys, message):
 def login_do_ssh_challenge(asn, ssh_key, message):
     """执行 SSH 签名挑战"""
     challenge = tools.gen_random_code(32)
-    
+
     # 格式化显示密钥
     ssh_key_display = f"`{ssh_key[:60]}...`" if len(ssh_key) > 60 else f"`{ssh_key}`"
-    
+
     msg = bot.send_message(
         message.chat.id,
         (
@@ -650,9 +698,90 @@ def login_do_ssh_challenge(asn, ssh_key, message):
     bot.register_next_step_handler(msg, partial(login_signature_verify_ssh, asn, challenge, [ssh_key]))
 
 
+def fetch_gpg_key_from_keyserver(fingerprint):
+    """从密钥服务器获取 GPG 公钥
+
+    说明：不同 keyserver 之间可能不同步（例如某些 keyserver 不会同步 keys.openpgp.org 的内容）。
+
+    Args:
+        fingerprint: GPG 指纹（也可为 keyid）
+
+    Returns:
+        tuple: (成功与否, 输出信息)
+    """
+    keyservers = [
+        "hkps://keyserver.ubuntu.com",
+        "hkps://keys.openpgp.org",
+    ]
+
+    outputs = []
+    for keyserver in keyservers:
+        result = subprocess.run(
+            [
+                'gpg',
+                '--batch',
+                '--keyserver', keyserver,
+                '--keyserver-options', 'timeout=10',
+                '--recv-keys', fingerprint,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        combined = (result.stderr or "") + "\n" + (result.stdout or "")
+        outputs.append(f"[{keyserver}]\n{combined}".strip())
+
+        if result.returncode == 0:
+            return True, "\n\n".join(outputs)
+
+    return False, "\n\n".join(outputs)
+
+
+def gpg_has_public_key(fingerprint):
+    result = subprocess.run(
+        ['gpg', '--batch', '--list-keys', '--keyid-format', 'LONG', fingerprint],
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    return result.returncode == 0
+
+
+def import_gpg_key(key_data):
+    """导入 GPG 公钥
+
+    Args:
+        key_data: 公钥数据（ASCII armor 格式）
+
+    Returns:
+        tuple: (成功与否, 输出信息)
+    """
+    import tempfile
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.asc', delete=False) as f:
+        f.write(key_data)
+        temp_file = f.name
+
+    try:
+        result = subprocess.run(
+            ['gpg', '--import', temp_file],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+
+        combined = (result.stderr or "") + "\n" + (result.stdout or "")
+        if result.returncode == 0:
+            return True, combined
+
+        return False, combined
+    finally:
+        os.unlink(temp_file)
+
+
 def login_signature_verify_gpg(asn, challenge, gpg_fingerprints, message):
     """验证 GPG 签名
-    
+
     Args:
         asn: AS号
         challenge: 挑战字符串
@@ -666,9 +795,9 @@ def login_signature_verify_gpg(asn, challenge, gpg_fingerprints, message):
             reply_markup=ReplyKeyboardRemove(),
         )
         return
-    
+
     signed_message = message.text.strip()
-    
+
     # 验证签名
     try:
         # 将签名消息写入临时文件
@@ -676,8 +805,9 @@ def login_signature_verify_gpg(asn, challenge, gpg_fingerprints, message):
         with tempfile.NamedTemporaryFile(mode='w', suffix='.asc', delete=False) as f:
             f.write(signed_message)
             temp_file = f.name
-        
+
         try:
+
             # 使用 gpg --verify 验证签名
             result = subprocess.run(
                 ['gpg', '--verify', temp_file],
@@ -685,10 +815,10 @@ def login_signature_verify_gpg(asn, challenge, gpg_fingerprints, message):
                 text=True,
                 timeout=5
             )
-            
+
             # 检查验证结果
             stderr = result.stderr
-            
+
             # 从输出中提取指纹
             signature_fingerprint = None
             for line in stderr.split('\n'):
@@ -706,10 +836,10 @@ def login_signature_verify_gpg(asn, challenge, gpg_fingerprints, message):
                         if len(word) >= 16 and all(c in '0123456789ABCDEFabcdef' for c in word):
                             signature_fingerprint = word.upper()
                             break
-            
+
             # 验证签名的指纹是否在注册的指纹列表中
             fingerprints_upper = [fp.replace(' ', '').upper() for fp in gpg_fingerprints]
-            
+
             if signature_fingerprint and any(sig_fp in fp or fp in sig_fp for sig_fp in [signature_fingerprint] for fp in fingerprints_upper):
                 # 验证挑战字符串
                 # 使用 gpg --decrypt 获取原文
@@ -719,9 +849,9 @@ def login_signature_verify_gpg(asn, challenge, gpg_fingerprints, message):
                     text=True,
                     timeout=5
                 )
-                
+
                 decrypted_text = decrypt_result.stdout.strip()
-                
+
                 if challenge in decrypted_text:
                     # 签名验证成功，执行登录
                     db[message.chat.id] = asn
@@ -729,7 +859,7 @@ def login_signature_verify_gpg(asn, challenge, gpg_fingerprints, message):
                     os.makedirs(data_dir, exist_ok=True)
                     with open(os.path.join(data_dir, "user_db.pkl"), "wb") as f:
                         pickle.dump((db, db_privilege), f)
-                    
+
                     bot.send_message(
                         message.chat.id,
                         (
@@ -746,11 +876,11 @@ def login_signature_verify_gpg(asn, challenge, gpg_fingerprints, message):
                     raise ValueError("Challenge string mismatch")
             else:
                 raise ValueError("Fingerprint not matched")
-                
+
         finally:
             # 清理临时文件
             os.unlink(temp_file)
-            
+
     except Exception as e:
         bot.send_message(
             message.chat.id,
@@ -771,9 +901,54 @@ def login_signature_verify_gpg(asn, challenge, gpg_fingerprints, message):
         )
 
 
+def login_import_gpg_key(asn, challenge, gpg_fingerprints, message):
+    """处理用户手动输入的 GPG 公钥"""
+    if message.text.strip() == "/cancel":
+        bot.send_message(
+            message.chat.id,
+            "Current operation has been cancelled.\n当前操作已被取消。",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        return
+
+    key_data = message.text.strip()
+
+    # 尝试导入公钥
+    success, output = import_gpg_key(key_data)
+
+    if not success:
+        bot.send_message(
+            message.chat.id,
+            (
+                "❌ Failed to import public key!\n"
+                "❌ 导入公钥失败！\n"
+                "\n"
+                f"Error: {output}\n"
+                "\n"
+                "Please make sure you pasted the complete ASCII-armored public key block (BEGIN/END included).\n"
+                "请确认你粘贴的是完整的 ASCII armor 公钥块（包含 BEGIN/END）。\n"
+                "\n"
+                "Use /login to retry.\n"
+                "你可以使用 /login 重试。"
+            ),
+            parse_mode="Markdown",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        return
+
+    gpg_fingerprint = gpg_fingerprints[0] if gpg_fingerprints else ""
+    msg = send_gpg_challenge_message(
+        message.chat.id,
+        gpg_fingerprint,
+        challenge,
+        key_status="✅ Public key imported manually. / ✅ 公钥已手动导入。",
+    )
+    bot.register_next_step_handler(msg, partial(login_signature_verify_gpg, asn, challenge, gpg_fingerprints))
+
+
 def login_signature_verify_ssh(asn, challenge, ssh_keys, message):
     """验证 SSH 签名
-    
+
     Args:
         asn: AS号
         challenge: 挑战字符串
@@ -787,28 +962,28 @@ def login_signature_verify_ssh(asn, challenge, ssh_keys, message):
             reply_markup=ReplyKeyboardRemove(),
         )
         return
-    
+
     signature = message.text.strip()
-    
+
     # 验证签名
     try:
         import tempfile
-        
+
         # 创建临时目录
         temp_dir = tempfile.mkdtemp()
         challenge_file = os.path.join(temp_dir, "challenge.txt")
         signature_file = os.path.join(temp_dir, "challenge.txt.sig")
         allowed_signers_file = os.path.join(temp_dir, "allowed_signers")
-        
+
         try:
             # 写入挑战字符串（不带换行符，命令使用 echo -n）
             with open(challenge_file, 'w') as f:
                 f.write(challenge)
-            
+
             # 写入签名
             with open(signature_file, 'w') as f:
                 f.write(signature)
-            
+
             # 尝试每个 SSH 公钥进行验证
             verified = False
             for ssh_key in ssh_keys:
@@ -816,7 +991,7 @@ def login_signature_verify_ssh(asn, challenge, ssh_keys, message):
                 # 格式: principal key-type key-data
                 with open(allowed_signers_file, 'w') as f:
                     f.write(f"user@dn42 {ssh_key}\n")
-                
+
                 # 使用 ssh-keygen -Y verify 验证签名
                 try:
                     result = subprocess.run(
@@ -832,14 +1007,14 @@ def login_signature_verify_ssh(asn, challenge, ssh_keys, message):
                         text=True,
                         timeout=5
                     )
-                    
+
                     # 检查返回码和输出（Good 可能在 stdout 或 stderr）
                     if result.returncode == 0 and ('Good' in result.stdout or 'Good' in result.stderr):
                         verified = True
                         break
                 except Exception:
                     continue
-            
+
             if verified:
                 # 签名验证成功，执行登录
                 db[message.chat.id] = asn
@@ -847,7 +1022,7 @@ def login_signature_verify_ssh(asn, challenge, ssh_keys, message):
                 os.makedirs(data_dir, exist_ok=True)
                 with open(os.path.join(data_dir, "user_db.pkl"), "wb") as f:
                     pickle.dump((db, db_privilege), f)
-                
+
                 bot.send_message(
                     message.chat.id,
                     (
@@ -862,12 +1037,12 @@ def login_signature_verify_ssh(asn, challenge, ssh_keys, message):
                 )
             else:
                 raise ValueError("SSH signature verification failed")
-                
+
         finally:
             # 清理临时文件
             import shutil
             shutil.rmtree(temp_dir, ignore_errors=True)
-            
+
     except Exception as e:
         bot.send_message(
             message.chat.id,
