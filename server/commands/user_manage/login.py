@@ -750,7 +750,7 @@ def _recv_gpg_key_from_keyserver(fingerprint, keyserver):
             ['gpg', '--keyserver', keyserver, '--recv-keys', fingerprint],
             capture_output=True,
             text=True,
-            timeout=5
+            timeout=30
         )
         return result.returncode == 0
     except Exception:
@@ -899,47 +899,45 @@ def login_signature_verify_gpg(asn, challenge, gpg_fingerprints, message):
                 _do_gpg_login_success(message.chat.id, asn)
                 return
             
-            # 第三步：如果有指纹但不匹配，尝试从密钥服务器获取
-            if signature_fingerprint:
-                # 提示用户等待
-                wait_msg = bot.send_message(
-                    message.chat.id,
-                    (
-                        "⏳ Local verification failed. Trying to fetch the public key from keyservers...\n"
-                        "⏳ 本地验证失败，正在尝试从密钥服务器获取公钥...\n"
-                        "\n"
-                        "This may take a while (up to 1 minute), please be patient.\n"
-                        "这可能需要一些时间（最多 1 分钟），请耐心等待。"
-                    ),
-                    reply_markup=ReplyKeyboardRemove(),
-                )
-                bot.send_chat_action(chat_id=message.chat.id, action="typing")
-                
-                # 尝试从密钥服务器获取密钥（两个服务器都尝试）
-                keyservers = [
-                    'hkp://keys.openpgp.org',
-                    'hkp://keyserver.ubuntu.com'
-                ]
-                
+            # 第三步：尝试从密钥服务器获取用户选择的指纹对应的公钥
+            # 提示用户等待
+            wait_msg = bot.send_message(
+                message.chat.id,
+                (
+                    "⏳ Local verification failed. Trying to fetch the public key from keyservers...\n"
+                    "⏳ 本地验证失败，正在尝试从密钥服务器获取公钥...\n"
+                    "\n"
+                    "This may take a while (up to 1 minute), please be patient.\n"
+                    "这可能需要一些时间（最多 1 分钟），请耐心等待。"
+                ),
+                reply_markup=ReplyKeyboardRemove(),
+            )
+            bot.send_chat_action(chat_id=message.chat.id, action="typing")
+            
+            # 尝试从密钥服务器获取密钥（使用用户选择的指纹，两个服务器都尝试）
+            keyservers = [
+                'hkp://keys.openpgp.org',
+                'hkp://keyserver.ubuntu.com'
+            ]
+            
+            for fp in gpg_fingerprints:
                 for keyserver in keyservers:
-                    _recv_gpg_key_from_keyserver(signature_fingerprint, keyserver)
+                    _recv_gpg_key_from_keyserver(fp, keyserver)
                 
-                # 删除等待消息
-                try:
-                    bot.delete_message(message.chat.id, wait_msg.message_id)
-                except Exception:
-                    pass
-                
-                # 不管是否成功获取，都尝试再次验证
-                if True:
-                    # 再次尝试验证指纹
-                    success, signature_fingerprint, error_msg = _try_gpg_verify_fingerprint(
-                        temp_file, gpg_fingerprints
-                    )
-                    
-                    if success:
-                        _do_gpg_login_success(message.chat.id, asn)
-                        return
+            # 删除等待消息
+            try:
+                bot.delete_message(message.chat.id, wait_msg.message_id)
+            except Exception:
+                pass
+            
+            # 再次尝试验证指纹
+            success, signature_fingerprint, error_msg = _try_gpg_verify_fingerprint(
+                temp_file, gpg_fingerprints
+            )
+            
+            if success:
+                _do_gpg_login_success(message.chat.id, asn)
+                return
             
             # 第四步：所有自动方式都失败，询问用户是否手动上传公钥
             markup = ReplyKeyboardMarkup(resize_keyboard=True)
