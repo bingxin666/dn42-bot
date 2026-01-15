@@ -651,28 +651,45 @@ def login_do_ssh_challenge(asn, ssh_key, message):
 
 
 def _extract_fingerprint_from_gpg_output(stderr):
-    """从 GPG 输出中提取指纹
+    """从 GPG 输出中提取主密钥指纹
+    
+    注意：GPG 签名可能使用子密钥(subkey)，但 DN42 registry 中注册的是主密钥指纹。
+    因此需要优先提取主密钥指纹(Primary key fingerprint)。
     
     Args:
         stderr: GPG 命令的 stderr 输出
         
     Returns:
-        str or None: 提取到的指纹（大写，无空格），或 None
+        str or None: 提取到的主密钥指纹（大写，无空格），或 None
     """
+    primary_fingerprint = None
+    subkey_fingerprint = None
+    
     for line in stderr.split('\n'):
-        if 'Primary key fingerprint:' in line or 'fingerprint:' in line.lower():
-            # 提取指纹（移除空格和冒号）
+        # 优先提取主密钥指纹
+        if 'Primary key fingerprint:' in line:
             parts = line.split(':')
             if len(parts) > 1:
-                return parts[-1].strip().replace(' ', '').upper()
-        # GPG 输出中也可能是 "gpg: Good signature from"
-        if 'using' in line.lower() and 'key' in line.lower():
-            # 尝试提取十六进制指纹
+                primary_fingerprint = parts[-1].strip().replace(' ', '').upper()
+        # 子密钥指纹作为备选
+        elif 'Subkey fingerprint:' in line:
+            parts = line.split(':')
+            if len(parts) > 1:
+                subkey_fingerprint = parts[-1].strip().replace(' ', '').upper()
+        # 其他格式的指纹提取（如果没有明确标识）
+        elif 'fingerprint:' in line.lower() and not primary_fingerprint:
+            parts = line.split(':')
+            if len(parts) > 1:
+                primary_fingerprint = parts[-1].strip().replace(' ', '').upper()
+        # GPG 输出中也可能是 "using RSA key XXXX" 格式（这是子密钥）
+        elif 'using' in line.lower() and 'key' in line.lower() and not subkey_fingerprint:
             words = line.split()
             for word in words:
                 if len(word) >= 16 and all(c in '0123456789ABCDEFabcdef' for c in word):
-                    return word.upper()
-    return None
+                    subkey_fingerprint = word.upper()
+    
+    # 优先返回主密钥指纹，如果没有则返回子密钥指纹
+    return primary_fingerprint or subkey_fingerprint
 
 
 def _gpg_decrypt_challenge(temp_file):
@@ -1116,7 +1133,8 @@ def login_gpg_receive_public_key(asn, challenge, gpg_fingerprints, temp_file, si
     else:
         # 文本消息，追加到缓冲区
         text = message.text or ""
-        key_buffer = key_buffer + ("\n" if key_buffer else "") + text
+        # 直接拼接，因为每条消息本身已经包含换行符
+        key_buffer = key_buffer + text
         
         # 检查是否收到完整的公钥
         if "-----END PGP PUBLIC KEY BLOCK-----" in key_buffer:
