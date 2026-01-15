@@ -650,8 +650,196 @@ def login_do_ssh_challenge(asn, ssh_key, message):
     bot.register_next_step_handler(msg, partial(login_signature_verify_ssh, asn, challenge, [ssh_key]))
 
 
+def _extract_fingerprint_from_gpg_output(stderr):
+    """从 GPG 输出中提取指纹
+    
+    Args:
+        stderr: GPG 命令的 stderr 输出
+        
+    Returns:
+        str or None: 提取到的指纹（大写，无空格），或 None
+    """
+    for line in stderr.split('\n'):
+        if 'Primary key fingerprint:' in line or 'fingerprint:' in line.lower():
+            # 提取指纹（移除空格和冒号）
+            parts = line.split(':')
+            if len(parts) > 1:
+                return parts[-1].strip().replace(' ', '').upper()
+        # GPG 输出中也可能是 "gpg: Good signature from"
+        if 'using' in line.lower() and 'key' in line.lower():
+            # 尝试提取十六进制指纹
+            words = line.split()
+            for word in words:
+                if len(word) >= 16 and all(c in '0123456789ABCDEFabcdef' for c in word):
+                    return word.upper()
+    return None
+
+
+def _gpg_decrypt_challenge(temp_file):
+    """使用 GPG 解密签名消息，获取原文
+    
+    Args:
+        temp_file: 签名文件路径
+        
+    Returns:
+        tuple: (decrypted_text: str or None, stderr: str)
+    """
+    try:
+        decrypt_result = subprocess.run(
+            ['gpg', '--decrypt', temp_file],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        return decrypt_result.stdout.strip(), decrypt_result.stderr
+    except Exception as e:
+        return None, str(e)
+
+
+def _try_gpg_verify_fingerprint(temp_file, gpg_fingerprints):
+    """验证 GPG 签名的指纹是否匹配
+    
+    Args:
+        temp_file: 签名文件路径
+        gpg_fingerprints: 允许的 GPG 指纹列表
+        
+    Returns:
+        tuple: (success: bool, signature_fingerprint: str or None, error_msg: str or None)
+    """
+    # 使用 gpg --verify 验证签名
+    result = subprocess.run(
+        ['gpg', '--verify', temp_file],
+        capture_output=True,
+        text=True,
+        timeout=10
+    )
+    
+    stderr = result.stderr
+    signature_fingerprint = _extract_fingerprint_from_gpg_output(stderr)
+    
+    if not signature_fingerprint:
+        return False, None, "Could not extract fingerprint from signature"
+    
+    # 验证签名的指纹是否在注册的指纹列表中
+    fingerprints_upper = [fp.replace(' ', '').upper() for fp in gpg_fingerprints]
+    
+    fingerprint_matched = any(
+        sig_fp in fp or fp in sig_fp 
+        for sig_fp in [signature_fingerprint] 
+        for fp in fingerprints_upper
+    )
+    
+    if not fingerprint_matched:
+        return False, signature_fingerprint, "Fingerprint not matched"
+    
+    return True, signature_fingerprint, None
+
+
+def _recv_gpg_key_from_keyserver(fingerprint, keyserver):
+    """从密钥服务器获取 GPG 密钥
+    
+    Args:
+        fingerprint: 密钥指纹
+        keyserver: 密钥服务器地址
+        
+    Returns:
+        bool: 是否成功获取
+    """
+    try:
+        result = subprocess.run(
+            ['gpg', '--keyserver', keyserver, '--recv-keys', fingerprint],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
+def _import_gpg_key_from_text(key_text):
+    """从文本导入 GPG 公钥
+    
+    Args:
+        key_text: GPG 公钥文本（ASCII armored 格式）
+        
+    Returns:
+        tuple: (success: bool, fingerprint: str or None, error_msg: str or None)
+    """
+    try:
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.asc', delete=False) as f:
+            f.write(key_text)
+            key_file = f.name
+        
+        try:
+            # 导入公钥
+            result = subprocess.run(
+                ['gpg', '--import', key_file],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            
+            # 从输出中提取指纹
+            stderr = result.stderr
+            fingerprint = None
+            
+            # 尝试从 "key XXXX: public key" 格式提取
+            for line in stderr.split('\n'):
+                if 'key' in line.lower() and ':' in line:
+                    words = line.split()
+                    for i, word in enumerate(words):
+                        if word.lower() == 'key' and i + 1 < len(words):
+                            potential_fp = words[i + 1].rstrip(':').upper()
+                            if len(potential_fp) >= 8 and all(c in '0123456789ABCDEF' for c in potential_fp):
+                                fingerprint = potential_fp
+                                break
+                    if fingerprint:
+                        break
+            
+            if result.returncode == 0:
+                return True, fingerprint, None
+            else:
+                return False, None, f"Import failed: {stderr}"
+                
+        finally:
+            os.unlink(key_file)
+            
+    except Exception as e:
+        return False, None, str(e)
+
+
+def _do_gpg_login_success(chat_id, asn):
+    """GPG 登录成功后的处理"""
+    db[chat_id] = asn
+    data_dir = "./data"
+    os.makedirs(data_dir, exist_ok=True)
+    with open(os.path.join(data_dir, "user_db.pkl"), "wb") as f:
+        pickle.dump((db, db_privilege), f)
+    
+    bot.send_message(
+        chat_id,
+        (
+            f"✅ Signature verified successfully!\n"
+            f"✅ 签名验证成功！\n"
+            "\n"
+            f"Welcome! `{tools.get_asn_mnt_text(asn)}`\n"
+            f"欢迎你！`{tools.get_asn_mnt_text(asn)}`"
+        ),
+        parse_mode="Markdown",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+
+
 def login_signature_verify_gpg(asn, challenge, gpg_fingerprints, message):
     """验证 GPG 签名
+    
+    验证流程：
+    1. 先运行 gpg --decrypt 验证挑战字符串是否匹配
+    2. 尝试直接验证指纹（使用本地密钥）
+    3. 如果指纹验证失败，尝试从密钥服务器获取密钥后再验证
+    4. 如果仍然失败，询问用户是否手动上传公钥
     
     Args:
         asn: AS号
@@ -678,78 +866,120 @@ def login_signature_verify_gpg(asn, challenge, gpg_fingerprints, message):
             temp_file = f.name
         
         try:
-            # 使用 gpg --verify 验证签名
-            result = subprocess.run(
-                ['gpg', '--verify', temp_file],
-                capture_output=True,
-                text=True,
-                timeout=5
+            # 第一步：先验证挑战字符串是否匹配
+            decrypted_text, decrypt_stderr = _gpg_decrypt_challenge(temp_file)
+            
+            if decrypted_text is None or challenge not in decrypted_text:
+                bot.send_message(
+                    message.chat.id,
+                    (
+                        "❌ Challenge string mismatch!\n"
+                        "❌ 挑战字符串不匹配！\n"
+                        "\n"
+                        f"Expected / 期望: `{challenge}`\n"
+                        f"Got / 收到: `{decrypted_text if decrypted_text else '(unable to decrypt)'}`\n"
+                        "\n"
+                        "Please make sure you signed the correct challenge string.\n"
+                        "请确保你签名了正确的挑战字符串。\n"
+                        "\n"
+                        "You can use /login to retry.\n"
+                        "你可以使用 /login 重试。"
+                    ),
+                    parse_mode="Markdown",
+                    reply_markup=ReplyKeyboardRemove(),
+                )
+                return
+            
+            # 第二步：尝试直接验证指纹
+            success, signature_fingerprint, error_msg = _try_gpg_verify_fingerprint(
+                temp_file, gpg_fingerprints
             )
             
-            # 检查验证结果
-            stderr = result.stderr
+            if success:
+                _do_gpg_login_success(message.chat.id, asn)
+                return
             
-            # 从输出中提取指纹
-            signature_fingerprint = None
-            for line in stderr.split('\n'):
-                if 'Primary key fingerprint:' in line or 'fingerprint:' in line.lower():
-                    # 提取指纹（移除空格和冒号）
-                    parts = line.split(':')
-                    if len(parts) > 1:
-                        signature_fingerprint = parts[-1].strip().replace(' ', '').upper()
-                        break
-                # GPG 输出中也可能是 "gpg: Good signature from"
-                if 'using' in line.lower() and 'key' in line.lower():
-                    # 尝试提取十六进制指纹
-                    words = line.split()
-                    for word in words:
-                        if len(word) >= 16 and all(c in '0123456789ABCDEFabcdef' for c in word):
-                            signature_fingerprint = word.upper()
-                            break
-            
-            # 验证签名的指纹是否在注册的指纹列表中
-            fingerprints_upper = [fp.replace(' ', '').upper() for fp in gpg_fingerprints]
-            
-            if signature_fingerprint and any(sig_fp in fp or fp in sig_fp for sig_fp in [signature_fingerprint] for fp in fingerprints_upper):
-                # 验证挑战字符串
-                # 使用 gpg --decrypt 获取原文
-                decrypt_result = subprocess.run(
-                    ['gpg', '--decrypt', temp_file],
-                    capture_output=True,
-                    text=True,
-                    timeout=5
+            # 第三步：如果有指纹但不匹配，尝试从密钥服务器获取
+            if signature_fingerprint:
+                # 提示用户等待
+                wait_msg = bot.send_message(
+                    message.chat.id,
+                    (
+                        "⏳ Local verification failed. Trying to fetch the public key from keyservers...\n"
+                        "⏳ 本地验证失败，正在尝试从密钥服务器获取公钥...\n"
+                        "\n"
+                        "This may take a while (up to 1 minute), please be patient.\n"
+                        "这可能需要一些时间（最多 1 分钟），请耐心等待。"
+                    ),
+                    reply_markup=ReplyKeyboardRemove(),
                 )
+                bot.send_chat_action(chat_id=message.chat.id, action="typing")
                 
-                decrypted_text = decrypt_result.stdout.strip()
+                # 尝试从密钥服务器获取密钥
+                keyservers = [
+                    'hkp://keys.openpgp.org',
+                    'hkp://keyserver.ubuntu.com'
+                ]
                 
-                if challenge in decrypted_text:
-                    # 签名验证成功，执行登录
-                    db[message.chat.id] = asn
-                    data_dir = "./data"
-                    os.makedirs(data_dir, exist_ok=True)
-                    with open(os.path.join(data_dir, "user_db.pkl"), "wb") as f:
-                        pickle.dump((db, db_privilege), f)
-                    
-                    bot.send_message(
-                        message.chat.id,
-                        (
-                            f"✅ Signature verified successfully!\n"
-                            f"✅ 签名验证成功！\n"
-                            "\n"
-                            f"Welcome! `{tools.get_asn_mnt_text(asn)}`\n"
-                            f"欢迎你！`{tools.get_asn_mnt_text(asn)}`"
-                        ),
-                        parse_mode="Markdown",
-                        reply_markup=ReplyKeyboardRemove(),
+                key_fetched = False
+                for keyserver in keyservers:
+                    if _recv_gpg_key_from_keyserver(signature_fingerprint, keyserver):
+                        key_fetched = True
+                        break
+                
+                # 删除等待消息
+                try:
+                    bot.delete_message(message.chat.id, wait_msg.message_id)
+                except Exception:
+                    pass
+                
+                if key_fetched:
+                    # 再次尝试验证指纹
+                    success, signature_fingerprint, error_msg = _try_gpg_verify_fingerprint(
+                        temp_file, gpg_fingerprints
                     )
-                else:
-                    raise ValueError("Challenge string mismatch")
-            else:
-                raise ValueError("Fingerprint not matched")
+                    
+                    if success:
+                        _do_gpg_login_success(message.chat.id, asn)
+                        return
+            
+            # 第四步：所有自动方式都失败，询问用户是否手动上传公钥
+            markup = ReplyKeyboardMarkup(resize_keyboard=True)
+            markup.row_width = 1
+            markup.add(
+                KeyboardButton("📤 Upload Public Key 上传公钥"),
+                KeyboardButton("❌ Cancel 取消")
+            )
+            
+            msg = bot.send_message(
+                message.chat.id,
+                (
+                    "⚠️ Could not verify the signature with available keys.\n"
+                    "⚠️ 无法使用可用的密钥验证签名。\n"
+                    "\n"
+                    "Would you like to manually upload your GPG public key?\n"
+                    "你想要手动上传你的 GPG 公钥吗？\n"
+                    "\n"
+                    "Note: The uploaded public key must match one of the fingerprints registered in the DN42 registry.\n"
+                    "注意：上传的公钥必须与 DN42 registry 中注册的指纹之一匹配。"
+                ),
+                reply_markup=markup,
+            )
+            # 保存临时文件路径和相关信息，供后续验证使用
+            bot.register_next_step_handler(
+                msg, 
+                partial(login_gpg_ask_manual_upload, asn, challenge, gpg_fingerprints, temp_file, signed_message)
+            )
+            # 不要在这里删除临时文件，后续还需要使用
+            return
                 
-        finally:
+        except Exception as e:
             # 清理临时文件
-            os.unlink(temp_file)
+            try:
+                os.unlink(temp_file)
+            except Exception:
+                pass
+            raise e
             
     except Exception as e:
         bot.send_message(
@@ -763,6 +993,224 @@ def login_signature_verify_gpg(asn, challenge, gpg_fingerprints, message):
                 "\n"
                 "Please try to avoid signing in Windows command line, which may cause line ending issues.\n"
                 "请尽量不要在 Windows 命令行中进行签名，这可能会导致换行符问题。\n"
+                "\n"
+                "You can use /login to retry.\n"
+                "你可以使用 /login 重试。"
+            ),
+            reply_markup=ReplyKeyboardRemove(),
+        )
+
+
+def login_gpg_ask_manual_upload(asn, challenge, gpg_fingerprints, temp_file, signed_message, message):
+    """询问用户是否手动上传公钥"""
+    choice = message.text.strip()
+    
+    if choice == "/cancel" or "Cancel" in choice or "取消" in choice:
+        # 清理临时文件
+        try:
+            os.unlink(temp_file)
+        except Exception:
+            pass
+        bot.send_message(
+            message.chat.id,
+            "Current operation has been cancelled.\n当前操作已被取消。",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        return
+    
+    if "Upload" in choice or "上传" in choice:
+        msg = bot.send_message(
+            message.chat.id,
+            (
+                "📤 Please send your GPG public key.\n"
+                "📤 请发送你的 GPG 公钥。\n"
+                "\n"
+                "You can export it with:\n"
+                "你可以使用以下命令导出：\n"
+                "`gpg --armor --export <your-key-id>`\n"
+                "\n"
+                "The key should start with `-----BEGIN PGP PUBLIC KEY BLOCK-----`\n"
+                "公钥应该以 `-----BEGIN PGP PUBLIC KEY BLOCK-----` 开头\n"
+                "\n"
+                "Use /cancel to interrupt the operation.\n"
+                "使用 /cancel 终止操作。"
+            ),
+            parse_mode="Markdown",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        bot.register_next_step_handler(
+            msg,
+            partial(login_gpg_receive_public_key, asn, challenge, gpg_fingerprints, temp_file, signed_message)
+        )
+    else:
+        # 无效选择，重新询问
+        markup = ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.row_width = 1
+        markup.add(
+            KeyboardButton("📤 Upload Public Key 上传公钥"),
+            KeyboardButton("❌ Cancel 取消")
+        )
+        msg = bot.send_message(
+            message.chat.id,
+            (
+                "Invalid choice. Please select an option.\n"
+                "无效的选择。请选择一个选项。"
+            ),
+            reply_markup=markup,
+        )
+        bot.register_next_step_handler(
+            msg,
+            partial(login_gpg_ask_manual_upload, asn, challenge, gpg_fingerprints, temp_file, signed_message)
+        )
+
+
+def login_gpg_receive_public_key(asn, challenge, gpg_fingerprints, temp_file, signed_message, message):
+    """接收用户上传的公钥并验证"""
+    if message.text.strip() == "/cancel":
+        # 清理临时文件
+        try:
+            os.unlink(temp_file)
+        except Exception:
+            pass
+        bot.send_message(
+            message.chat.id,
+            "Current operation has been cancelled.\n当前操作已被取消。",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        return
+    
+    public_key = message.text.strip()
+    
+    # 验证公钥格式
+    if not public_key.startswith("-----BEGIN PGP PUBLIC KEY BLOCK-----"):
+        msg = bot.send_message(
+            message.chat.id,
+            (
+                "❌ Invalid GPG public key format.\n"
+                "❌ 无效的 GPG 公钥格式。\n"
+                "\n"
+                "The key should start with `-----BEGIN PGP PUBLIC KEY BLOCK-----`\n"
+                "公钥应该以 `-----BEGIN PGP PUBLIC KEY BLOCK-----` 开头\n"
+                "\n"
+                "Please try again or use /cancel to abort.\n"
+                "请重试或使用 /cancel 取消。"
+            ),
+            parse_mode="Markdown",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        bot.register_next_step_handler(
+            msg,
+            partial(login_gpg_receive_public_key, asn, challenge, gpg_fingerprints, temp_file, signed_message)
+        )
+        return
+    
+    try:
+        # 导入公钥
+        import_success, imported_fingerprint, import_error = _import_gpg_key_from_text(public_key)
+        
+        if not import_success:
+            msg = bot.send_message(
+                message.chat.id,
+                (
+                    "❌ Failed to import the public key.\n"
+                    "❌ 导入公钥失败。\n"
+                    "\n"
+                    f"Error: {import_error}\n"
+                    f"错误: {import_error}\n"
+                    "\n"
+                    "Please try again or use /cancel to abort.\n"
+                    "请重试或使用 /cancel 取消。"
+                ),
+                reply_markup=ReplyKeyboardRemove(),
+            )
+            bot.register_next_step_handler(
+                msg,
+                partial(login_gpg_receive_public_key, asn, challenge, gpg_fingerprints, temp_file, signed_message)
+            )
+            return
+        
+        # 验证导入的公钥指纹是否与 registry 中的匹配
+        fingerprints_upper = [fp.replace(' ', '').upper() for fp in gpg_fingerprints]
+        
+        fingerprint_matched = False
+        if imported_fingerprint:
+            fingerprint_matched = any(
+                imported_fingerprint in fp or fp in imported_fingerprint
+                for fp in fingerprints_upper
+            )
+        
+        if not fingerprint_matched:
+            # 清理临时文件
+            try:
+                os.unlink(temp_file)
+            except Exception:
+                pass
+            
+            bot.send_message(
+                message.chat.id,
+                (
+                    "❌ The uploaded public key does not match any fingerprint registered in the DN42 registry.\n"
+                    "❌ 上传的公钥与 DN42 registry 中注册的指纹不匹配。\n"
+                    "\n"
+                    f"Imported key fingerprint / 导入的密钥指纹: `{imported_fingerprint or 'unknown'}`\n"
+                    f"Expected fingerprints / 期望的指纹:\n"
+                    + "\n".join([f"- `{fp}`" for fp in gpg_fingerprints]) +
+                    "\n\n"
+                    "Please make sure you upload the correct public key.\n"
+                    "请确保你上传了正确的公钥。\n"
+                    "\n"
+                    "You can use /login to retry.\n"
+                    "你可以使用 /login 重试。"
+                ),
+                parse_mode="Markdown",
+                reply_markup=ReplyKeyboardRemove(),
+            )
+            return
+        
+        # 公钥指纹匹配，重新验证签名
+        success, signature_fingerprint, error_msg = _try_gpg_verify_fingerprint(
+            temp_file, gpg_fingerprints
+        )
+        
+        # 清理临时文件
+        try:
+            os.unlink(temp_file)
+        except Exception:
+            pass
+        
+        if success:
+            _do_gpg_login_success(message.chat.id, asn)
+        else:
+            bot.send_message(
+                message.chat.id,
+                (
+                    "❌ Signature verification still failed after importing the public key.\n"
+                    "❌ 导入公钥后签名验证仍然失败。\n"
+                    "\n"
+                    f"Error: {error_msg}\n"
+                    f"错误: {error_msg}\n"
+                    "\n"
+                    "You can use /login to retry.\n"
+                    "你可以使用 /login 重试。"
+                ),
+                reply_markup=ReplyKeyboardRemove(),
+            )
+            
+    except Exception as e:
+        # 清理临时文件
+        try:
+            os.unlink(temp_file)
+        except Exception:
+            pass
+        
+        bot.send_message(
+            message.chat.id,
+            (
+                "❌ An error occurred while processing the public key.\n"
+                "❌ 处理公钥时发生错误。\n"
+                "\n"
+                f"Error: {str(e)}\n"
+                f"错误: {str(e)}\n"
                 "\n"
                 "You can use /login to retry.\n"
                 "你可以使用 /login 重试。"
