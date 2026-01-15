@@ -24,43 +24,47 @@ def main():
     parser = argparse.ArgumentParser(description='Update DN42 registry cache')
     parser.add_argument('--force', action='store_true',
                         help='Force fresh clone (removes existing registry)')
+    parser.add_argument('--verbose', '-v', action='store_true',
+                        help='Show verbose output')
     args = parser.parse_args()
     
     if args.force:
-        print(f"Removing existing registry at {registry.REGISTRY_PATH}...")
+        if args.verbose:
+            print(f"Removing existing registry at {registry.REGISTRY_PATH}...")
         if os.path.exists(registry.REGISTRY_PATH):
             shutil.rmtree(registry.REGISTRY_PATH)
-            print("Removed.")
-        else:
-            print("Registry doesn't exist, nothing to remove.")
+            if args.verbose:
+                print("Removed.")
     
-    print("Updating DN42 registry...")
-    print(f"Source: {registry.REGISTRY_URL}")
-    print(f"Destination: {registry.REGISTRY_PATH}")
-    print()
+    if args.verbose:
+        print("Updating DN42 registry...")
+        print(f"Source: {registry.REGISTRY_URL}")
+        print(f"Destination: {registry.REGISTRY_PATH}")
+        print()
     
     result = registry.ensure_registry_cloned()
     
     if result:
-        print("\n✓ Registry updated successfully!")
-        
-        # Show some stats
-        asns = registry.list_all_asns()
-        print(f"\nStatistics:")
-        print(f"  Total ASNs: {len(asns)}")
-        if asns:
-            print(f"  ASN range: AS{min(asns)} - AS{max(asns)}")
-        
-        # Test a lookup
-        if asns:
-            test_asn = asns[0]
-            mnt = registry.get_asn_field(test_asn, "mnt-by")
-            as_name = registry.get_asn_field(test_asn, "as-name")
-            print(f"\n  Sample ASN (AS{test_asn}):")
-            print(f"    mnt-by: {mnt}")
-            print(f"    as-name: {as_name}")
+        if args.verbose:
+            print("\n✓ Registry updated successfully!")
+            
+            # Show some stats
+            asns = registry.list_all_asns()
+            print(f"\nStatistics:")
+            print(f"  Total ASNs: {len(asns)}")
+            if asns:
+                print(f"  ASN range: AS{min(asns)} - AS{max(asns)}")
+            
+            # Test a lookup
+            if asns:
+                test_asn = asns[0]
+                mnt = registry.get_asn_field(test_asn, "mnt-by")
+                as_name = registry.get_asn_field(test_asn, "as-name")
+                print(f"\n  Sample ASN (AS{test_asn}):")
+                print(f"    mnt-by: {mnt}")
+                print(f"    as-name: {as_name}")
     else:
-        print("\n✗ Failed to update registry!")
+        print("✗ Failed to update registry!")
         print("Please check your network connection and try again.")
         sys.exit(1)
 
