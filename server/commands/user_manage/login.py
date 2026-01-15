@@ -750,7 +750,7 @@ def _recv_gpg_key_from_keyserver(fingerprint, keyserver):
             ['gpg', '--keyserver', keyserver, '--recv-keys', fingerprint],
             capture_output=True,
             text=True,
-            timeout=30
+            timeout=5
         )
         return result.returncode == 0
     except Exception:
@@ -915,17 +915,14 @@ def login_signature_verify_gpg(asn, challenge, gpg_fingerprints, message):
                 )
                 bot.send_chat_action(chat_id=message.chat.id, action="typing")
                 
-                # 尝试从密钥服务器获取密钥
+                # 尝试从密钥服务器获取密钥（两个服务器都尝试）
                 keyservers = [
                     'hkp://keys.openpgp.org',
                     'hkp://keyserver.ubuntu.com'
                 ]
                 
-                key_fetched = False
                 for keyserver in keyservers:
-                    if _recv_gpg_key_from_keyserver(signature_fingerprint, keyserver):
-                        key_fetched = True
-                        break
+                    _recv_gpg_key_from_keyserver(signature_fingerprint, keyserver)
                 
                 # 删除等待消息
                 try:
@@ -933,7 +930,8 @@ def login_signature_verify_gpg(asn, challenge, gpg_fingerprints, message):
                 except Exception:
                     pass
                 
-                if key_fetched:
+                # 不管是否成功获取，都尝试再次验证
+                if True:
                     # 再次尝试验证指纹
                     success, signature_fingerprint, error_msg = _try_gpg_verify_fingerprint(
                         temp_file, gpg_fingerprints
@@ -1025,12 +1023,15 @@ def login_gpg_ask_manual_upload(asn, challenge, gpg_fingerprints, temp_file, sig
                 "📤 Please send your GPG public key.\n"
                 "📤 请发送你的 GPG 公钥。\n"
                 "\n"
-                "You can export it with:\n"
-                "你可以使用以下命令导出：\n"
-                "`gpg --armor --export <your-key-id>`\n"
+                "You can:\n"
+                "你可以：\n"
+                "- Upload a `.asc` or `.txt` file containing the public key\n"
+                "  上传包含公钥的 `.asc` 或 `.txt` 文件\n"
+                "- Paste the public key directly (may require multiple messages)\n"
+                "  直接粘贴公钥（可能需要多条消息）\n"
                 "\n"
-                "The key should start with `-----BEGIN PGP PUBLIC KEY BLOCK-----`\n"
-                "公钥应该以 `-----BEGIN PGP PUBLIC KEY BLOCK-----` 开头\n"
+                "Export command / 导出命令：\n"
+                "`gpg --armor --export <your-key-id>`\n"
                 "\n"
                 "Use /cancel to interrupt the operation.\n"
                 "使用 /cancel 终止操作。"
@@ -1038,9 +1039,10 @@ def login_gpg_ask_manual_upload(asn, challenge, gpg_fingerprints, temp_file, sig
             parse_mode="Markdown",
             reply_markup=ReplyKeyboardRemove(),
         )
+        # 初始化空的公钥缓冲区，用于接收分段粘贴的公钥
         bot.register_next_step_handler(
             msg,
-            partial(login_gpg_receive_public_key, asn, challenge, gpg_fingerprints, temp_file, signed_message)
+            partial(login_gpg_receive_public_key, asn, challenge, gpg_fingerprints, temp_file, signed_message, "")
         )
     else:
         # 无效选择，重新询问
@@ -1064,9 +1066,18 @@ def login_gpg_ask_manual_upload(asn, challenge, gpg_fingerprints, temp_file, sig
         )
 
 
-def login_gpg_receive_public_key(asn, challenge, gpg_fingerprints, temp_file, signed_message, message):
-    """接收用户上传的公钥并验证"""
-    if message.text.strip() == "/cancel":
+def login_gpg_receive_public_key(asn, challenge, gpg_fingerprints, temp_file, signed_message, key_buffer, message):
+    """接收用户上传的公钥并验证
+    
+    支持：
+    - 文件上传（.asc 或 .txt 文件）
+    - 分段粘贴（等待收到完整的 PGP 公钥块）
+    
+    Args:
+        key_buffer: 已接收的公钥内容缓冲区（用于分段粘贴）
+    """
+    # 检查是否取消
+    if message.text and message.text.strip() == "/cancel":
         # 清理临时文件
         try:
             os.unlink(temp_file)
@@ -1079,18 +1090,79 @@ def login_gpg_receive_public_key(asn, challenge, gpg_fingerprints, temp_file, si
         )
         return
     
-    public_key = message.text.strip()
+    public_key = None
+    
+    # 检查是否是文件上传
+    if message.document:
+        try:
+            file_info = bot.get_file(message.document.file_id)
+            downloaded_file = bot.download_file(file_info.file_path)
+            public_key = downloaded_file.decode('utf-8')
+        except Exception as e:
+            msg = bot.send_message(
+                message.chat.id,
+                (
+                    f"❌ Failed to read the uploaded file: {str(e)}\n"
+                    f"❌ 读取上传文件失败: {str(e)}\n"
+                    "\n"
+                    "Please try again or use /cancel to abort.\n"
+                    "请重试或使用 /cancel 取消。"
+                ),
+                reply_markup=ReplyKeyboardRemove(),
+            )
+            bot.register_next_step_handler(
+                msg,
+                partial(login_gpg_receive_public_key, asn, challenge, gpg_fingerprints, temp_file, signed_message, key_buffer)
+            )
+            return
+    else:
+        # 文本消息，追加到缓冲区
+        text = message.text or ""
+        key_buffer = key_buffer + ("\n" if key_buffer else "") + text
+        
+        # 检查是否收到完整的公钥
+        if "-----END PGP PUBLIC KEY BLOCK-----" in key_buffer:
+            public_key = key_buffer
+        elif "-----BEGIN PGP PUBLIC KEY BLOCK-----" in key_buffer:
+            # 已经开始但还没结束，静默等待下一条消息
+            bot.register_next_step_handler(
+                message,
+                partial(login_gpg_receive_public_key, asn, challenge, gpg_fingerprints, temp_file, signed_message, key_buffer)
+            )
+            return
+        else:
+            # 还没开始
+            msg = bot.send_message(
+                message.chat.id,
+                (
+                    "❌ Invalid GPG public key format.\n"
+                    "❌ 无效的 GPG 公钥格式。\n"
+                    "\n"
+                    "The key should start with `-----BEGIN PGP PUBLIC KEY BLOCK-----`\n"
+                    "公钥应该以 `-----BEGIN PGP PUBLIC KEY BLOCK-----` 开头\n"
+                    "\n"
+                    "Please try again or use /cancel to abort.\n"
+                    "请重试或使用 /cancel 取消。"
+                ),
+                parse_mode="Markdown",
+                reply_markup=ReplyKeyboardRemove(),
+            )
+            bot.register_next_step_handler(
+                msg,
+                partial(login_gpg_receive_public_key, asn, challenge, gpg_fingerprints, temp_file, signed_message, "")
+            )
+            return
     
     # 验证公钥格式
-    if not public_key.startswith("-----BEGIN PGP PUBLIC KEY BLOCK-----"):
+    if not public_key or "-----BEGIN PGP PUBLIC KEY BLOCK-----" not in public_key:
         msg = bot.send_message(
             message.chat.id,
             (
                 "❌ Invalid GPG public key format.\n"
                 "❌ 无效的 GPG 公钥格式。\n"
                 "\n"
-                "The key should start with `-----BEGIN PGP PUBLIC KEY BLOCK-----`\n"
-                "公钥应该以 `-----BEGIN PGP PUBLIC KEY BLOCK-----` 开头\n"
+                "The key should contain `-----BEGIN PGP PUBLIC KEY BLOCK-----`\n"
+                "公钥应该包含 `-----BEGIN PGP PUBLIC KEY BLOCK-----`\n"
                 "\n"
                 "Please try again or use /cancel to abort.\n"
                 "请重试或使用 /cancel 取消。"
@@ -1100,7 +1172,7 @@ def login_gpg_receive_public_key(asn, challenge, gpg_fingerprints, temp_file, si
         )
         bot.register_next_step_handler(
             msg,
-            partial(login_gpg_receive_public_key, asn, challenge, gpg_fingerprints, temp_file, signed_message)
+            partial(login_gpg_receive_public_key, asn, challenge, gpg_fingerprints, temp_file, signed_message, "")
         )
         return
     
@@ -1125,7 +1197,7 @@ def login_gpg_receive_public_key(asn, challenge, gpg_fingerprints, temp_file, si
             )
             bot.register_next_step_handler(
                 msg,
-                partial(login_gpg_receive_public_key, asn, challenge, gpg_fingerprints, temp_file, signed_message)
+                partial(login_gpg_receive_public_key, asn, challenge, gpg_fingerprints, temp_file, signed_message, "")
             )
             return
         

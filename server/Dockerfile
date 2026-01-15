@@ -10,6 +10,8 @@ RUN apt-get update && \
     build-essential \
     git \
     gpg \
+    gpg-agent \
+    dirmngr \
     openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
