@@ -57,5 +57,6 @@ def whoami(message, new_asn=None, info_node=None):
         bot.send_message(
             message.chat.id,
             "Current login user:\n当前登录用户：\n" f"`{tools.get_asn_mnt_text(db[message.chat.id])}`",
+            parse_mode="Markdown",
             reply_markup=ReplyKeyboardRemove(),
         )

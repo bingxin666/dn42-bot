@@ -1133,7 +1133,9 @@ def login_gpg_receive_public_key(asn, challenge, gpg_fingerprints, temp_file, si
     else:
         # 文本消息，追加到缓冲区
         text = message.text or ""
-        # 直接拼接，因为每条消息本身已经包含换行符
+        # 每条 Telegram 消息末尾没有换行符，需要添加换行符来正确拼接
+        if key_buffer and not key_buffer.endswith('\n'):
+            key_buffer = key_buffer + "\n"
         key_buffer = key_buffer + text
         
         # 检查是否收到完整的公钥
