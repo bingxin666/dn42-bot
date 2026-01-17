@@ -23,6 +23,10 @@
 ## TODO
  - [ ] 支持节点审批
 
+## 注意事项
+ - 使用特权码登录时，请按照输入 `/login <ASN>` - 选择 `📧 Email Verification 邮箱验证` - 输入特权码的步骤登录。
+ - 由于 Telegram API 的限制，需要设置 Webhook 才能正确响应当用户手动发送 `GPG 公钥` 时的请求，否则由于消息接收顺序的问题，可能会导致登录失败。
+
 以下为原 README 内容：
 
 # Yet Another Telegram DN42 Bot
