@@ -43,6 +43,7 @@ async def pre_peer(request):
             "max": base.MAX_PEERS,
             "requirement": base.MIN_PEER_REQUIREMENT,
             "open": base.OPEN,
+            "verify": base.VERIFY,
             "net_support": base.NET_SUPPORT,
             "lla": str(base.MY_DN42_LINK_LOCAL_ADDRESS),
             "msg": base.EXTRA_MSG,

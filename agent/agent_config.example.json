@@ -3,6 +3,7 @@
     "PORT": 54321,
     "SECRET": "secret_token",
     "OPEN": true,
+    "VERIFY": false,
     "MAX_PEERS": 0,
     "MIN_PEER_REQUIREMENT": 0,
     "NET_SUPPORT": {

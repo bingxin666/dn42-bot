@@ -10,6 +10,7 @@ import config
 import requests
 import tools
 from base import bot, db, db_privilege
+from commands.peer.peer_requests import add_pending_request, notify_privileged_of_request
 from telebot.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -83,6 +84,9 @@ def pre_region(message, peer_info):
         if data["blocked_time"]:
             time_str = datetime.fromtimestamp(data["blocked_time"], tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
             msg += f"  ⚠️ ASN been blocked since {time_str}\n"
+        verify_required = bool(data.get("verify", False) and data["open"])
+        if verify_required:
+            msg += "  ⚠️ Manual verification required\n"
         if data["msg"]:
             msg += f'  {data["msg"]}\n'
         msg += "\n"
@@ -99,7 +103,7 @@ def pre_region(message, peer_info):
                 have_unpeerable = True
                 continue
             could_peer.append(k)
-            peer_info["Region"][base.servers[k]] = (k, data["lla"], data["net_support"])
+            peer_info["Region"][base.servers[k]] = (k, data["lla"], data["net_support"], verify_required)
     bot.send_message(
         message.chat.id,
         f"Node List 节点列表\n{msg.strip()}",
@@ -176,6 +180,7 @@ def post_region(message, peer_info, chosen=None):
         return "post_region", peer_info, msg
     peer_info["Provide-LinkLocal"] = peer_info["Region"][chosen][1]
     peer_info["Net_Support"] = peer_info["Region"][chosen][2]
+    peer_info["Verify"] = peer_info["Region"][chosen][3]
     peer_info["Region"] = peer_info["Region"][chosen][0]
     return "pre_session_type", peer_info, message
 
@@ -831,6 +836,20 @@ def post_confirm(message, peer_info):
             reply_markup=ReplyKeyboardRemove(),
         )
         return
+    verify_required = progress_type == "peer" and bool(peer_info.get("Verify"))
+    if verify_required:
+        request_id = add_pending_request(peer_info, info_text, message.chat.id)
+        notify_privileged_of_request(request_id, peer_info, info_text)
+        bot.send_message(
+            message.chat.id,
+            (
+                "Your peer request has been submitted and is pending manual verification.\n"
+                "你的 Peer 请求已提交，等待人工审核。"
+            ),
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        return
+    peer_info.pop("Verify", None)
     bot.send_chat_action(chat_id=message.chat.id, action="typing")
     try:
         if peer_info["Region"] in config.HOSTS:
