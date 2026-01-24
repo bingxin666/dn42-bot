@@ -68,8 +68,8 @@ def notify_privileged_of_request(request_id, peer_info, info_text):
         f"From chat: {requester}\n"
         f"Time: {created_at}\n"
         f"```PeerInfo\n{info_text}```\n"
-        "Use /peer_request allow <id> or /peer_request deny <id>.\n"
-        "使用 /peer_request allow <id> 或 /peer_request deny <id>。"
+        "Use /peer\\_request allow <id> or /peer\\_request deny <id>.\n"
+        "使用 /peer\\_request allow <id> 或 /peer\\_request deny <id>。"
     )
     for chat_id in db_privilege:
         bot.send_message(chat_id, text, parse_mode="Markdown")
