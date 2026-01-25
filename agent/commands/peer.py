@@ -43,6 +43,7 @@ async def pre_peer(request):
             "max": base.MAX_PEERS,
             "requirement": base.MIN_PEER_REQUIREMENT,
             "open": base.OPEN,
+            "verify": base.VERIFY,
             "net_support": base.NET_SUPPORT,
             "lla": str(base.MY_DN42_LINK_LOCAL_ADDRESS),
             "msg": base.EXTRA_MSG,
@@ -205,7 +206,7 @@ async def get_info(request):
             out = simple_run(f"birdc -s {base.BIRD_CTL_PATH} show protocols all {the_session}")
             out = [i.strip().splitlines() for i in out.split("Channel ")]
             out = {
-                i[0].strip(): {j.split(":", 1)[0].strip(): j.split(":", 1)[1].strip() for j in i[1:]}
+                i[0].strip(): {j.split(":", 1)[0].strip(): j.split(":", 1)[1].strip() for j in i[1:] if ":" in j}
                 for i in out
                 if i[0].strip().startswith("ipv")
             }

@@ -8,6 +8,7 @@ import commands.blacklist.get_blocked
 import commands.peer.info
 import commands.peer.modify
 import commands.peer.peer
+import commands.peer.peer_requests
 import commands.peer.remove
 import commands.peer.restart
 import commands.statistics.peer_list

@@ -21,7 +21,7 @@
 | DIG_ADDRESS         | The address of /dig                                                                            |
 
 ## TODO
- - [ ] 支持节点审批
+ - [x] 支持节点审批
 
 ## 注意事项
  - 使用特权码登录时，请按照输入 `/login <ASN>` - 选择 `📧 Email Verification 邮箱验证` - 输入特权码的步骤登录。
